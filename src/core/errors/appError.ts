@@ -1,0 +1,46 @@
+export const ERROR_CODES = [
+  "VALIDATION_ERROR",
+  "UNAUTHORIZED",
+  "FORBIDDEN",
+  "NOT_FOUND",
+  "COMPANY_UNREACHABLE",
+  "LLM_RATE_LIMITED",
+  "LLM_INVALID_RESPONSE",
+  "KIT_VALIDATION_FAILED",
+  "NOT_IMPLEMENTED",
+  "INTERNAL_ERROR",
+] as const;
+
+export type ErrorCode = (typeof ERROR_CODES)[number];
+
+export class AppError extends Error {
+  readonly statusCode: number;
+  readonly code: ErrorCode;
+  readonly details?: unknown;
+  readonly expose: boolean;
+
+  constructor(
+    code: ErrorCode,
+    message: string,
+    statusCode = 500,
+    options?: { details?: unknown; expose?: boolean; cause?: unknown },
+  ) {
+    super(message, options?.cause ? { cause: options.cause } : undefined);
+    this.name = "AppError";
+    this.code = code;
+    this.statusCode = statusCode;
+    this.details = options?.details;
+    this.expose = options?.expose ?? statusCode < 500;
+  }
+}
+
+export type PipelineIssue = {
+  code: string;
+  message: string;
+  stage?: string;
+  recoverable?: boolean;
+};
+
+export function isAppError(error: unknown): error is AppError {
+  return error instanceof AppError;
+}
