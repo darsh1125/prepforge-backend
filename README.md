@@ -60,7 +60,7 @@ UI: `http://localhost:3000`
 | `AUTH_COOKIE_NAME` | HTTP-only authentication cookie name |
 | `AUTH_TOKEN_TTL_SECONDS` | Finite JWT cookie lifetime |
 | `BCRYPT_ROUNDS` | Password hashing work factor |
-| `LLM_API_KEY` | Reserved for later LLM integration; tests must not require it |
+| `LLM_API_KEY` | OpenAI-compatible provider key for extraction and generation; tests must not require it |
 
 CORS is origin-specific and `credentials: true`; wildcard origins are not used. Authentication uses a signed JWT in an HTTP-only, `SameSite=Lax` cookie. Production cookies are Secure. State-changing requests also check the `Origin` header against `WEB_ORIGIN`, which provides CSRF defense for the separate frontend/backend deployment.
 
@@ -90,8 +90,8 @@ The input is a JSON array of `{ id, jd, company_url, days }` cases. Output is th
 prepforge-frontend  --HTTP JSON-->  prepforge-backend
                                          |
                                          +--> MongoDB
-                                         +--> retrieval / research (later)
-                                         +--> LLM provider (later)
+                                         +--> retrieval / research
+                                         +--> LLM provider
                                          +--> deterministic core
 ```
 
@@ -109,7 +109,7 @@ The CLI maps each case to `{ jd, companyUrl, daysAvailable, mode: "evaluation" }
 
 `src/core` is framework-independent: no Express `Request`/`Response`, no React, no Next.js.
 
-Planned stages (not implemented yet): extract requirements → fetch homepage → discover/rank/retrieve pages → research interview process → generate questions → deterministic coverage → gap fill → flashcards → deterministic schedule → validate → persist.
+Pipeline stages: extract requirements → fetch homepage → discover/rank/retrieve pages → research interview process → generate questions → deterministic coverage → gap fill → flashcards → deterministic schedule → validate → persist.
 
 ### Strict Appendix A contract
 
@@ -177,10 +177,10 @@ Production fetching must reject non-HTTP(S) URLs and private/loopback addresses 
 
 ## Database
 
-- `User`: `email`, `passwordHash`, timestamps. No plaintext passwords. Auth is not implemented yet.
+- `User`: `email`, `passwordHash`, timestamps. No plaintext passwords. Auth uses signed HTTP-only JWT cookies.
 - `Kit`: owner, input (`jd`, `company_url`, `days`), generation `status` / `progress` / `warnings`, embedded Appendix A `kit`, editor and practice metadata, optional input fingerprint.
 
-## Current implementation status (Prompt 14)
+## Current implementation status (Prompt 15)
 
 Implemented:
 
@@ -193,7 +193,7 @@ Implemented:
 - Generation status / warning types
 - LLM client interface (unimplemented)
 - URL policy boundary
-- Shared `generateKit()` stub
+- Shared dependency-injected `generateKitPipeline()`
 - Evaluator CLI command surface
 - Domain tests
 - Bounded company-site retrieval foundation with SSRF checks, redirects, robots, parsing, ranking, and partial-failure warnings
@@ -210,11 +210,10 @@ Implemented:
 - Deterministic coverage/schedule derivation after builder edits
 - Working Appendix B batch evaluator with strict input validation, per-case isolation, bounded concurrency, atomic output, and canonical pipeline reuse
 
-Not implemented (later prompts):
+Known provider-dependent limitations:
 
-- LLM generation, requirement extraction, and public interview research
-- Full kit generation and public interview interpretation
-- practice mode and regeneration
+- Live LLM generation and public research require configured provider credentials.
+- The evaluator command is fully wired, but a successful live-provider batch requires those credentials and an available fixture/public source.
 
 ## Company retrieval
 
@@ -250,7 +249,7 @@ Requirement IDs are assigned after validation in source order as `r1`, `r2`, and
 
 Model drafts are validated, repaired at most once, normalized, deduplicated, checked against valid requirement IDs, and assigned exported IDs `q1`, `q2`, and so on in TypeScript. Difficulty is always an integer from 1 to 3. Generated question edit metadata (`origin`, `edited`, `pinned`) is stored separately and is not exposed in the strict Appendix A question shape.
 
-Category failures are partial and produce warnings without discarding successful categories. Missing requirements or research skip unsupported categories honestly. Coverage checking, targeted gap generation, regeneration, flashcards, scheduling, and final kit completion are intentionally deferred.
+Category failures are partial and produce warnings without discarding successful categories. Missing requirements or research skip unsupported categories honestly. Coverage checking, targeted gap generation, regeneration, flashcards, scheduling, and final kit completion are handled by the shared pipeline and deterministic services.
 
 Scraped HTML is untrusted source text. The parser removes executable/noisy elements but does not treat page text as instructions. Future LLM prompts must preserve that boundary.
 

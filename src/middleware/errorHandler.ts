@@ -39,6 +39,11 @@ export function errorHandler(
     return;
   }
 
+  if (err instanceof Error && err.name === "VersionError") {
+    res.status(409).json({ error: { code: "KIT_VERSION_CONFLICT", message: "This kit changed in another request. Reload the latest version before saving." } });
+    return;
+  }
+
   if (isAppError(err)) {
     const body: ErrorBody = {
       error: {

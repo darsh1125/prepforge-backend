@@ -66,7 +66,7 @@ export const roleSchema = z.object({
 
 export const questionSchema = z.object({
   id: nonEmptyIdSchema,
-  requirement_ids: z.array(nonEmptyIdSchema),
+  requirement_ids: z.array(nonEmptyIdSchema).transform((ids) => [...new Set(ids)]),
   category: questionCategorySchema,
   prompt: z.string(),
   answer_outline: z.string(),
@@ -77,7 +77,7 @@ export const flashcardSchema = z.object({
   id: nonEmptyIdSchema,
   front: z.string(),
   back: z.string(),
-  requirement_ids: z.array(nonEmptyIdSchema),
+  requirement_ids: z.array(nonEmptyIdSchema).transform((ids) => [...new Set(ids)]),
 });
 
 export const scheduleDaySchema = z.object({

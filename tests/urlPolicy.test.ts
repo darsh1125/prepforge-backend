@@ -10,6 +10,7 @@ describe("URL retrieval policy", () => {
     const issues = inspectUrlPolicy("http://localhost:8099/acme/", "production");
     expect(issues.some((issue) => issue.code === "PRIVATE_ADDRESS_BLOCKED")).toBe(true);
     expect(isUrlAllowed("http://localhost:8099/acme/", "production")).toBe(false);
+    expect(isUrlAllowed("http://[::ffff:127.0.0.1]:8099/acme/", "production")).toBe(false);
   });
 
   it("allows evaluator-provided localhost fixtures in evaluator mode only", () => {

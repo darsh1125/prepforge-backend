@@ -36,6 +36,14 @@ function isPrivateIp(value: string): boolean {
   }
   if (net.isIPv6(value)) {
     const normalized = value.toLowerCase();
+    const mappedIpv4 = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    if (mappedIpv4?.[1]) return isPrivateIp(mappedIpv4[1]);
+    const mappedHex = normalized.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (mappedHex?.[1] && mappedHex[2]) {
+      const first = Number.parseInt(mappedHex[1], 16);
+      const second = Number.parseInt(mappedHex[2], 16);
+      return isPrivateIp(`${first >> 8}.${first & 255}.${second >> 8}.${second & 255}`);
+    }
     return normalized === "::1" || normalized === "::" || normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe8") || normalized.startsWith("fe9") || normalized.startsWith("fea") || normalized.startsWith("feb");
   }
   return false;

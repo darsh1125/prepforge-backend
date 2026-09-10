@@ -170,6 +170,13 @@ describe("Appendix A interview kit schema", () => {
     });
     expect(parsed.success).toBe(false);
   });
+
+  it("normalizes duplicate question and flashcard requirement references", () => {
+    const kit = validKit({ questions: [{ ...validKit().questions[0]!, requirement_ids: ["r1", "r1"] }], flashcards: [{ ...validKit().flashcards[0]!, requirement_ids: ["r1", "r1"] }] });
+    const parsed = interviewKitSchema.parse(kit);
+    expect(parsed.questions[0]?.requirement_ids).toEqual(["r1"]);
+    expect(parsed.flashcards[0]?.requirement_ids).toEqual(["r1"]);
+  });
 });
 
 describe("referential integrity", () => {

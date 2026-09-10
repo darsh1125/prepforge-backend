@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const evaluatorCaseSchema = z.object({ id: z.string().min(1).refine((value) => value.trim().length > 0, "ID must not be blank"), jd: z.string().min(1).refine((value) => value.trim().length > 0, "jd must not be blank"), company_url: z.string().url(), days: z.number().int().min(1).max(60) }).strict();
+export const evaluatorCaseSchema = z.object({ id: z.string().min(1).refine((value) => value.trim().length > 0, "ID must not be blank"), jd: z.string().min(1).refine((value) => value.trim().length > 0, "jd must not be blank"), company_url: z.string().url().refine((value) => { const protocol = new URL(value).protocol; return protocol === "http:" || protocol === "https:"; }, "company_url must use HTTP or HTTPS"), days: z.number().int().min(1).max(60) }).strict();
 export const evaluatorInputSchema = z.array(evaluatorCaseSchema);
 export type EvaluatorCase = z.infer<typeof evaluatorCaseSchema>;
 

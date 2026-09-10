@@ -13,6 +13,7 @@ describe("evaluator input contract", () => {
   it("rejects duplicate or blank IDs", () => {
     expect(() => validateEvaluatorCases([{ id: "a", jd: "x", company_url: "https://example.com", days: 5 }, { id: "a", jd: "y", company_url: "https://example.com", days: 5 }])).toThrow("Duplicate case id");
     expect(() => validateEvaluatorCases([{ id: " ", jd: "x", company_url: "https://example.com", days: 5 }])).toThrow();
+    expect(() => validateEvaluatorCases([{ id: "a", jd: "x", company_url: "ftp://example.com", days: 5 }])).toThrow();
   });
 
   it("keeps identified invalid cases isolated", async () => {

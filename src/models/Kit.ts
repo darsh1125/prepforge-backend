@@ -57,7 +57,7 @@ const kitRecordSchema = new mongoose.Schema(
     revision: { type: Number, default: 0 },
     derivedState: { type: mongoose.Schema.Types.Mixed, default: { coverageStale: false, scheduleStale: false } },
   },
-  { timestamps: true },
+  { timestamps: true, optimisticConcurrency: true },
 );
 
 kitRecordSchema.index({ ownerId: 1, updatedAt: -1 });
