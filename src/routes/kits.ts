@@ -2,6 +2,7 @@ import { Router } from "express";
 import { createKit, deleteKit, extractKitRequirements, generateKitFlashcards, generateKitPipelineRequest, generateKitQuestions, generateKitSchedule, getKit, listKits, researchCompany, researchInterviewProcess, updateKit } from "../controllers/kitController.js";
 import { requireAuth } from "../middleware/auth.js";
 import { createFlashcard, createQuestion, deleteFlashcard, deleteQuestion, pinFlashcard, pinQuestion, reorderQuestions, updateCompanyBrief, updateFlashcard, updateQuestion } from "../controllers/builderController.js";
+import { regenerateCompanyBriefEndpoint, regenerateQuestionCategoryEndpoint, regenerateScheduleEndpoint } from "../controllers/regenerationController.js";
 
 export const kitsRouter = Router();
 kitsRouter.use(requireAuth);
@@ -15,6 +16,9 @@ kitsRouter.post("/:id/generate", generateKitPipelineRequest);
 kitsRouter.post("/:id/generate/flashcards", generateKitFlashcards);
 kitsRouter.post("/:id/generate/schedule", generateKitSchedule);
 kitsRouter.patch("/:id/company-brief", updateCompanyBrief);
+kitsRouter.post("/:id/regenerate/company-brief", regenerateCompanyBriefEndpoint);
+kitsRouter.post("/:id/regenerate/questions/:category", regenerateQuestionCategoryEndpoint);
+kitsRouter.post("/:id/regenerate/schedule", regenerateScheduleEndpoint);
 kitsRouter.patch("/:id/questions/reorder", reorderQuestions);
 kitsRouter.post("/:id/questions", createQuestion);
 kitsRouter.patch("/:id/questions/:questionId", updateQuestion);

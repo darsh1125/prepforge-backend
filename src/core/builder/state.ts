@@ -21,6 +21,10 @@ export function createMetadata(id: string, prefix: "q" | "f", origin: ItemOrigin
   return { internalId: `${prefix === "q" ? "question" : "flashcard"}-${randomUUID()}`, id, origin, edited: true, pinned: false, order };
 }
 
+export function createGeneratedMetadata(id: string, prefix: "q" | "f", order: number): EditorItemMetadata {
+  return { internalId: `${prefix === "q" ? "question" : "flashcard"}-${randomUUID()}`, id, origin: "generated", edited: false, pinned: false, order };
+}
+
 export function hasQuestionContentChanged(before: Question, after: Question): boolean {
   return before.prompt !== after.prompt || before.answer_outline !== after.answer_outline || before.difficulty !== after.difficulty || before.category !== after.category || before.requirement_ids.join(",") !== after.requirement_ids.join(",");
 }

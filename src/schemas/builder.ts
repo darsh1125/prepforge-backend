@@ -10,4 +10,6 @@ export const reorderSchema = z.object({ question_ids: z.array(z.string().min(1))
 export const flashcardUpdateSchema = z.object({ front: z.string().min(1).max(5_000).optional(), back: z.string().min(1).max(12_000).optional(), requirement_ids: z.array(z.string().min(1)).max(30).optional(), expectedRevision: revisionSchema }).strict();
 export const flashcardCreateSchema = z.object({ front: z.string().trim().min(1).max(5_000), back: z.string().trim().min(1).max(12_000), requirement_ids: z.array(z.string().min(1)).max(30).default([]), expectedRevision: revisionSchema }).strict();
 export const pinSchema = z.object({ pinned: z.boolean(), expectedRevision: revisionSchema }).strict();
+export const regenerationCategorySchema = questionCategorySchema;
+export const regenerationRequestSchema = z.object({ expectedRevision: revisionSchema }).strict();
 export const requirementRefSchema = z.array(requirementSchema.shape.id).max(30);

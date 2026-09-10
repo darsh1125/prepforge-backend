@@ -6,6 +6,8 @@ export type QuestionGenerationContext = {
   requirements: Requirement[];
   companyResearch?: { companyNameHint?: string; pages?: { title: string; text: string; url: string }[] };
   interviewResearch?: InterviewResearchResult;
+  preservedQuestionPrompts?: string[];
+  targetRequirementIds?: string[];
 };
 
 export type QuestionDraft = { requirement_ids: string[]; prompt: string; answer_outline: string; difficulty: number };

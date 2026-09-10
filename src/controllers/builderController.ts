@@ -14,10 +14,10 @@ function userId(req: Request): string { if (!req.auth) throw new AppError("UNAUT
 function kitId(value: string | string[] | undefined): string { if (typeof value !== "string" || !mongoose.isValidObjectId(value)) throw new AppError("NOT_FOUND", "Kit not found", 404, { expose: true }); return value; }
 function paramId(req: Request, name: string): string { const value = req.params[name]; if (typeof value !== "string" || value.length === 0) throw new AppError("NOT_FOUND", "Item not found", 404, { expose: true }); return value; }
 async function owned(req: Request): Promise<KitRecordDocument> { const record = await Kit.findOne({ _id: kitId(req.params.id), ownerId: userId(req) }); if (!record) throw new AppError("NOT_FOUND", "Kit not found", 404, { expose: true }); return record; }
-function roleOf(record: KitRecordDocument): Role { const source = (record.kit as { role?: unknown } | null)?.role ?? (record.extraction as { role?: unknown } | null)?.role; if (!source) throw new AppError("ROLE_EXTRACTION_REQUIRED", "Analyze the job description before editing the kit", 409, { expose: true }); return roleSchema.parse(source); }
-function editor(record: KitRecordDocument): Record<string, unknown> { return (record.editorMetadata as Record<string, unknown> | null) ?? {}; }
-function assertRevision(record: KitRecordDocument, expected: number): void { if ((record.revision ?? 0) !== expected) throw new AppError("KIT_VERSION_CONFLICT", "This kit changed in another tab. Reload the latest version before saving.", 409, { details: { currentRevision: record.revision ?? 0 }, expose: true }); }
-function response(record: KitRecordDocument) { return { revision: record.revision ?? 0, questions: record.questions ?? [], questionMetadata: record.questionMetadata ?? [], flashcards: record.flashcards ?? [], flashcardMetadata: record.flashcardMetadata ?? [], coverage: record.coverage ?? null, schedule: record.schedule ?? null, derivedState: record.derivedState ?? null, companyBrief: (editor(record).companyBriefMeta as unknown) ?? null, kit: record.kit ?? null }; }
+export function roleOf(record: KitRecordDocument): Role { const source = (record.kit as { role?: unknown } | null)?.role ?? (record.extraction as { role?: unknown } | null)?.role; if (!source) throw new AppError("ROLE_EXTRACTION_REQUIRED", "Analyze the job description before editing the kit", 409, { expose: true }); return roleSchema.parse(source); }
+export function editor(record: KitRecordDocument): Record<string, unknown> { return (record.editorMetadata as Record<string, unknown> | null) ?? {}; }
+export function assertRevision(record: KitRecordDocument, expected: number): void { if ((record.revision ?? 0) !== expected) throw new AppError("KIT_VERSION_CONFLICT", "This kit changed in another tab. Reload the latest version before saving.", 409, { details: { currentRevision: record.revision ?? 0 }, expose: true }); }
+export function response(record: KitRecordDocument) { return { revision: record.revision ?? 0, questions: record.questions ?? [], questionMetadata: record.questionMetadata ?? [], flashcards: record.flashcards ?? [], flashcardMetadata: record.flashcardMetadata ?? [], coverage: record.coverage ?? null, schedule: record.schedule ?? null, derivedState: record.derivedState ?? null, companyBriefMeta: (editor(record).companyBriefMeta as unknown) ?? null, kit: record.kit ?? null }; }
 
 function validReferences(ids: string[], role: Role): void { const valid = new Set(role.requirements.map((requirement) => requirement.id)); const invalid = ids.filter((id) => !valid.has(id)); if (invalid.length) throw new AppError("VALIDATION_ERROR", `Unknown requirement reference: ${invalid.join(", ")}`, 400, { expose: true }); }
 
@@ -26,7 +26,7 @@ function updateExternal(record: KitRecordDocument, role: Role, questions: Questi
   record.set("kit", { ...current, role, questions, flashcards, coverage, schedule });
 }
 
-function derive(record: KitRecordDocument, role: Role, questions: Question[], removedQuestionId?: string): void {
+export function derive(record: KitRecordDocument, role: Role, questions: Question[], removedQuestionId?: string): void {
   const coverage = checkCoverage(role.requirements, questions);
   let schedule = record.schedule as { days_available: number; days: { day: number; focus: string; question_ids: string[]; minutes: number }[] } | null;
   let scheduleStale = false;
@@ -43,7 +43,7 @@ function derive(record: KitRecordDocument, role: Role, questions: Question[], re
   updateExternal(record, role, questions, flashcardSchema.array().parse(record.flashcards ?? []), coverageOutput, schedule);
 }
 
-async function save(record: KitRecordDocument): Promise<void> { record.revision = (record.revision ?? 0) + 1; await record.save(); }
+export async function save(record: KitRecordDocument): Promise<void> { record.revision = (record.revision ?? 0) + 1; await record.save(); }
 
 export async function updateCompanyBrief(req: Request, res: Response): Promise<void> {
   const record = await owned(req); const body = companyBriefUpdateSchema.parse(req.body); assertRevision(record, body.expectedRevision);

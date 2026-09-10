@@ -125,6 +125,18 @@ Builder routes:
 
 These routes return the updated builder state plus the strict `kit` Appendix A projection. Internal metadata is returned only as separate top-level editor state and never appears inside questions, flashcards, or the company brief source list.
 
+### Section Regeneration (Prompt 11)
+
+Regeneration is deliberately separate from `generateKitPipeline()`. The reusable services in `src/core/regeneration/` are:
+
+- `regenerateCompanyBrief()`: derives a fresh brief from persisted company/interview evidence, preserving manually edited fields and replacing the source list with the evidence actually used.
+- `regenerateQuestionCategory()`: partitions the selected category by current metadata, generates only replacement candidates, deduplicates against preserved prompts, preserves surviving exported IDs, and allocates new IDs above the current/deleted maximum.
+- `regenerateSchedule()`: calls only the deterministic scheduler and performs zero LLM calls.
+
+For category regeneration, `origin=user`, `edited=true`, and `pinned=true` are preservation conditions. Preserve wins when multiple conditions apply. Other categories, flashcards, research, and extracted requirements are untouched. New questions are generated with `origin=generated`, `edited=false`, `pinned=false`, fresh internal IDs, and appended within the selected category. Coverage is recomputed across the complete question set; only must-have gaps induced by the replacement are targeted for bounded repair. Pre-existing gaps are reported but are not silently repaired.
+
+Candidate generation and validation complete before the document is mutated. Provider failure or invalid output leaves the old section intact. All regeneration mutations require `expectedRevision`, enforce ownership and the category enum, and return `KIT_VERSION_CONFLICT` for stale clients. Endpoints are `POST /api/kits/:id/regenerate/company-brief`, `POST /api/kits/:id/regenerate/questions/:category`, and `POST /api/kits/:id/regenerate/schedule`.
+
 ### Deterministic vs LLM work
 
 Must stay TypeScript (no LLM):
