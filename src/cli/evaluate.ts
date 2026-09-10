@@ -1,36 +1,22 @@
-/**
- * Batch evaluator CLI.
- *
- * Intended usage:
- *   npm run evaluate -- --input <cases.json> --output <kits.json>
- *
- * Generation is not implemented yet. This entry point exists so the
- * command surface is stable. It must not invent kits or claim success.
- */
+import { readFile } from "node:fs/promises";
+import { parseArgs } from "node:util";
+import { validateEvaluatorBatch } from "./evaluator-input.js";
+import { runEvaluatorCases } from "./evaluator-runner.js";
+import { writeEvaluatorOutput, type EvaluatorOutput } from "./evaluator-output.js";
 
-function readArg(flag: string): string | undefined {
-  const index = process.argv.indexOf(flag);
-  if (index === -1) {
-    return undefined;
-  }
-  return process.argv[index + 1];
+function usage(): string { return "Usage: npm run evaluate -- --input <cases.json> --output <kits.json>"; }
+
+async function main(): Promise<void> {
+  const { values } = parseArgs({ options: { input: { type: "string" }, output: { type: "string" } }, strict: true });
+  if (!values.input || !values.output) throw new Error(usage());
+  let parsed: unknown;
+  try { parsed = JSON.parse(await readFile(values.input, "utf8")) as unknown; }
+  catch (error) { throw new Error(error instanceof Error && "code" in error && error.code === "ENOENT" ? `Input file not found: ${values.input}` : "Input file is not valid JSON."); }
+  const inputs = validateEvaluatorBatch(parsed);
+  console.error(`PrepForge evaluator: ${inputs.length} case${inputs.length === 1 ? "" : "s"}, concurrency 2`);
+  const kits = await runEvaluatorCases(inputs, 2, (index, input, output) => console.error(`[${index + 1}/${inputs.length}] ${input.id}: ${output.status}`));
+  const output: EvaluatorOutput = { version: "1.0", generated_at: new Date().toISOString(), kits };
+  await writeEvaluatorOutput(values.output, output);
 }
 
-function main(): void {
-  const input = readArg("--input");
-  const output = readArg("--output");
-
-  console.error("PrepForge evaluator is not implemented yet.");
-  console.error("The future command remains:");
-  console.error("  npm run evaluate -- --input <cases.json> --output <kits.json>");
-  if (input) {
-    console.error(`Received --input ${input}`);
-  }
-  if (output) {
-    console.error(`Received --output ${output}`);
-  }
-  console.error("Both the API and this CLI will call the same generateKit() pipeline.");
-  process.exitCode = 1;
-}
-
-main();
+main().catch((error: unknown) => { console.error(error instanceof Error ? error.message : "Evaluator failed."); process.exitCode = 1; });

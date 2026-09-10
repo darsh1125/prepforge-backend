@@ -76,7 +76,13 @@ npm run test
 npm run evaluate -- --input <cases.json> --output <kits.json>
 ```
 
-`evaluate` remains a later batch-evaluator surface. The web API uses the canonical persisted generation pipeline.
+The evaluator is a Mongo-free batch entry point over the same `generateKitPipeline()` used by the web API:
+
+```bash
+npm run evaluate -- --input cases.json --output kits.json
+```
+
+The input is a JSON array of `{ id, jd, company_url, days }` cases. Output is the exact Appendix B envelope with `version: "1.0"`, an ISO `generated_at`, and one ordered `ok` or `failed` result per input ID. Invalid IDs or duplicate IDs fail the whole invocation; invalid fields on an identified case become a failed result while the remaining cases continue. Output is written atomically and parent directories are created when needed. Evaluator retrieval uses the explicit internal `evaluation` mode so localhost fixtures can work without weakening production SSRF policy. Cases run with a bounded concurrency of two.
 
 ## Architecture
 
@@ -98,6 +104,8 @@ Express API  \
                ---> generateKit(...)
 CLI evaluator /
 ```
+
+The CLI maps each case to `{ jd, companyUrl, daysAvailable, mode: "evaluation" }` and invokes this same in-memory pipeline. It does not start Express, connect to MongoDB, or include editor/practice metadata in output. Schedule allocation, coverage, IDs, final validation, and Appendix A assembly remain deterministic core work.
 
 `src/core` is framework-independent: no Express `Request`/`Response`, no React, no Next.js.
 
@@ -172,7 +180,7 @@ Production fetching must reject non-HTTP(S) URLs and private/loopback addresses 
 - `User`: `email`, `passwordHash`, timestamps. No plaintext passwords. Auth is not implemented yet.
 - `Kit`: owner, input (`jd`, `company_url`, `days`), generation `status` / `progress` / `warnings`, embedded Appendix A `kit`, editor and practice metadata, optional input fingerprint.
 
-## Current implementation status (Prompt 10)
+## Current implementation status (Prompt 14)
 
 Implemented:
 
@@ -200,13 +208,13 @@ Implemented:
 - Revisioned kit builder with local-draft-friendly question, flashcard, company brief, pin, add/delete, and reorder mutations
 - Stable generated/user item metadata, deleted-ID reservation, ownership checks, strict mutation validation, and conflict responses
 - Deterministic coverage/schedule derivation after builder edits
+- Working Appendix B batch evaluator with strict input validation, per-case isolation, bounded concurrency, atomic output, and canonical pipeline reuse
 
 Not implemented (later prompts):
 
 - LLM generation, requirement extraction, and public interview research
 - Full kit generation and public interview interpretation
 - practice mode and regeneration
-- working batch evaluator output
 
 ## Company retrieval
 
