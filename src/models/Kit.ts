@@ -54,6 +54,8 @@ const kitRecordSchema = new mongoose.Schema(
     flashcardMetadata: { type: [mongoose.Schema.Types.Mixed], default: [] },
     schedule: { type: mongoose.Schema.Types.Mixed, default: null },
     generation: { type: mongoose.Schema.Types.Mixed, default: null },
+    revision: { type: Number, default: 0 },
+    derivedState: { type: mongoose.Schema.Types.Mixed, default: { coverageStale: false, scheduleStale: false } },
   },
   { timestamps: true },
 );

@@ -29,7 +29,8 @@ function validKitId(value: string | string[] | undefined): string {
 }
 
 function serialize(record: KitDocument) {
-  return { id: record._id.toString(), input: record.input, status: record.status, progress: record.progress, generation: record.generation ?? null, warnings: record.warnings, kit: record.kit ?? null, extraction: record.extraction ?? null, questions: record.questions ?? [], coverage: record.coverage ?? null, flashcards: record.flashcards ?? [], schedule: record.schedule ?? null, research: record.research ?? null, createdAt: record.createdAt, updatedAt: record.updatedAt };
+  const editorMetadata = (record.editorMetadata as Record<string, unknown> | null) ?? {};
+  return { id: record._id.toString(), input: record.input, status: record.status, progress: record.progress, generation: record.generation ?? null, revision: record.revision ?? 0, derivedState: record.derivedState ?? null, questionMetadata: record.questionMetadata ?? [], flashcardMetadata: record.flashcardMetadata ?? [], companyBriefMeta: editorMetadata.companyBriefMeta ?? null, warnings: record.warnings, kit: record.kit ?? null, extraction: record.extraction ?? null, questions: record.questions ?? [], coverage: record.coverage ?? null, flashcards: record.flashcards ?? [], schedule: record.schedule ?? null, research: record.research ?? null, createdAt: record.createdAt, updatedAt: record.updatedAt };
 }
 
 export async function createKit(req: Request, res: Response): Promise<void> {

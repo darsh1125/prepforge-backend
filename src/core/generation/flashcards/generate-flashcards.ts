@@ -14,7 +14,7 @@ export async function generateFlashcards(context: FlashcardContext, client: LLMC
     try {
       const raw = await client.generateStructured<unknown>(buildFlashcardRequest(context, lastError || undefined));
       const flashcards = assignIds(normalizeFlashcards(raw, context.requirements));
-      return { flashcards, metadata: flashcards.map((card) => ({ internalKey: `flashcard-${card.id}`, origin: "generated", edited: false, pinned: false })), warnings: [], ok: true };
+      return { flashcards, metadata: flashcards.map((card, index) => ({ internalKey: `flashcard-${card.id}`, id: card.id, internalId: `flashcard-${card.id}`, order: index, origin: "generated", edited: false, pinned: false })), warnings: [], ok: true };
     } catch (error) {
       lastError = error instanceof Error ? error.message : "FLASHCARD_GENERATION_FAILED";
       if (lastError === "LLM_RATE_LIMITED" || lastError === "LLM_UNAVAILABLE") break;

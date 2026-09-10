@@ -76,7 +76,7 @@ npm run test
 npm run evaluate -- --input <cases.json> --output <kits.json>
 ```
 
-`evaluate` is a **placeholder**. Generation is not implemented; the command exits with a clear pending message and does not invent kits.
+`evaluate` remains a later batch-evaluator surface. The web API uses the canonical persisted generation pipeline.
 
 ## Architecture
 
@@ -109,6 +109,22 @@ The evaluator kit shape is defined in `src/schemas/kit.ts` (Zod + inferred TypeS
 
 Internal MongoDB documents may include `ownerId`, `status`, `progress`, `warnings`, `editorMetadata`, `practiceMetadata`, and `inputFingerprint`. Those fields must **not** be injected into Appendix A when exporting.
 
+### Kit Builder (Prompt 10)
+
+The protected builder endpoints edit only owned kits and require `expectedRevision` on every mutation. A successful mutation increments `revision`; stale writes return `KIT_VERSION_CONFLICT` (HTTP 409). Backend validation owns field limits, allowed categories, requirement references, unique reorder IDs, and immutable company source URLs.
+
+Questions and flashcards retain stable exported IDs. Internal metadata stores a separate UUID identity, origin (`generated` or `user`), edited state, pin state, and order. Deleted IDs are reserved so later additions do not reuse an exported ID. Question edits update deterministic coverage; schedules are rebuilt when valid, or marked stale when must-have coverage is lost. Reordering preserves schedule and coverage content while persisting the new order.
+
+Builder routes:
+
+- `PATCH /api/kits/:id/company-brief`
+- `POST|PATCH|DELETE /api/kits/:id/questions` and `PATCH /api/kits/:id/questions/reorder`
+- `PATCH /api/kits/:id/questions/:questionId/pin`
+- `POST|PATCH|DELETE /api/kits/:id/flashcards`
+- `PATCH /api/kits/:id/flashcards/:flashcardId/pin`
+
+These routes return the updated builder state plus the strict `kit` Appendix A projection. Internal metadata is returned only as separate top-level editor state and never appears inside questions, flashcards, or the company brief source list.
+
 ### Deterministic vs LLM work
 
 Must stay TypeScript (no LLM):
@@ -138,7 +154,7 @@ Production fetching must reject non-HTTP(S) URLs and private/loopback addresses 
 - `User`: `email`, `passwordHash`, timestamps. No plaintext passwords. Auth is not implemented yet.
 - `Kit`: owner, input (`jd`, `company_url`, `days`), generation `status` / `progress` / `warnings`, embedded Appendix A `kit`, editor and practice metadata, optional input fingerprint.
 
-## Current implementation status (Prompt 9)
+## Current implementation status (Prompt 10)
 
 Implemented:
 
@@ -163,13 +179,15 @@ Implemented:
 - Canonical dependency-injected end-to-end generation pipeline with persisted progress
 - Persistence-backed duplicate trigger protection and stale-generation recovery
 - Strict final Appendix A assembly and validation before completion
+- Revisioned kit builder with local-draft-friendly question, flashcard, company brief, pin, add/delete, and reorder mutations
+- Stable generated/user item metadata, deleted-ID reservation, ownership checks, strict mutation validation, and conflict responses
+- Deterministic coverage/schedule derivation after builder edits
 
 Not implemented (later prompts):
 
 - LLM generation, requirement extraction, and public interview research
 - Full kit generation and public interview interpretation
-- coverage second pass, flashcards, scheduling
-- kit builder, practice mode
+- practice mode and regeneration
 - working batch evaluator output
 
 ## Company retrieval

@@ -37,7 +37,7 @@ export async function generateQuestionsWithCoverage(context: QuestionGenerationC
     questions = renumber(dedupe(questions)); diagnostics = checkCoverage(context.requirements, questions);
   }
   if (diagnostics.uncoveredNiceRequirementIds.length > 0) warnings.push({ code: "NICE_REQUIREMENTS_UNCOVERED", message: "One or more nice-to-have requirements remain uncovered", recoverable: true });
-  const metadata = questions.map((question) => ({ internalKey: `${question.category}-${question.id}`, origin: "generated" as const, edited: false, pinned: false }));
+  const metadata = questions.map((question, index) => ({ internalKey: `${question.category}-${question.id}`, id: question.id, internalId: `question-${question.id}`, order: index, origin: "generated" as const, edited: false, pinned: false }));
   if (fallbackUsed) passes = 3;
   const status: CoverageStatus = diagnostics.uncoveredMustRequirementIds.length > 0 ? "FAILURE" : diagnostics.uncoveredRequirementIds.length > 0 ? "PARTIAL_SUCCESS" : "FULL_SUCCESS";
   return { questions, metadata, warnings, coverage: { uncovered_requirement_ids: diagnostics.uncoveredRequirementIds, passes }, diagnostics, status };

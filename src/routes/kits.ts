@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { createKit, deleteKit, extractKitRequirements, generateKitFlashcards, generateKitPipelineRequest, generateKitQuestions, generateKitSchedule, getKit, listKits, researchCompany, researchInterviewProcess, updateKit } from "../controllers/kitController.js";
 import { requireAuth } from "../middleware/auth.js";
+import { createFlashcard, createQuestion, deleteFlashcard, deleteQuestion, pinFlashcard, pinQuestion, reorderQuestions, updateCompanyBrief, updateFlashcard, updateQuestion } from "../controllers/builderController.js";
 
 export const kitsRouter = Router();
 kitsRouter.use(requireAuth);
@@ -13,6 +14,16 @@ kitsRouter.post("/:id/generate/questions", generateKitQuestions);
 kitsRouter.post("/:id/generate", generateKitPipelineRequest);
 kitsRouter.post("/:id/generate/flashcards", generateKitFlashcards);
 kitsRouter.post("/:id/generate/schedule", generateKitSchedule);
+kitsRouter.patch("/:id/company-brief", updateCompanyBrief);
+kitsRouter.patch("/:id/questions/reorder", reorderQuestions);
+kitsRouter.post("/:id/questions", createQuestion);
+kitsRouter.patch("/:id/questions/:questionId", updateQuestion);
+kitsRouter.delete("/:id/questions/:questionId", deleteQuestion);
+kitsRouter.patch("/:id/questions/:questionId/pin", pinQuestion);
+kitsRouter.post("/:id/flashcards", createFlashcard);
+kitsRouter.patch("/:id/flashcards/:flashcardId", updateFlashcard);
+kitsRouter.delete("/:id/flashcards/:flashcardId", deleteFlashcard);
+kitsRouter.patch("/:id/flashcards/:flashcardId/pin", pinFlashcard);
 kitsRouter.get("/:id", getKit);
 kitsRouter.patch("/:id", updateKit);
 kitsRouter.delete("/:id", deleteKit);
