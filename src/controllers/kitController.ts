@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+import mongoose, { type HydratedDocument } from "mongoose";
 import type { Request, Response } from "express";
 import { AppError } from "../core/errors/appError.js";
 import { createInputFingerprint } from "../core/fingerprint.js";
@@ -13,6 +13,10 @@ import { createLLMClient } from "../core/llm/client.js";
 import { generateFlashcards } from "../core/generation/flashcards/index.js";
 import { buildStudySchedule } from "../core/scheduling/index.js";
 import { questionSchema } from "../schemas/kit.js";
+import { generateKitPipeline, defaultPipelineDependencies } from "../core/pipeline/generateKit.js";
+import type { PipelineProgress } from "../core/pipeline/types.js";
+import { loadEnv } from "../config/env.js";
+import { ACTIVE_GENERATION_STATUSES, isActiveGeneration } from "../core/pipeline/lock.js";
 
 function currentUserId(req: Request): string {
   if (!req.auth) throw new AppError("UNAUTHORIZED", "Authentication required", 401, { expose: true });
@@ -25,7 +29,7 @@ function validKitId(value: string | string[] | undefined): string {
 }
 
 function serialize(record: KitDocument) {
-  return { id: record._id.toString(), input: record.input, status: record.status, progress: record.progress, warnings: record.warnings, kit: record.kit ?? null, extraction: record.extraction ?? null, questions: record.questions ?? [], coverage: record.coverage ?? null, flashcards: record.flashcards ?? [], schedule: record.schedule ?? null, research: record.research ?? null, createdAt: record.createdAt, updatedAt: record.updatedAt };
+  return { id: record._id.toString(), input: record.input, status: record.status, progress: record.progress, generation: record.generation ?? null, warnings: record.warnings, kit: record.kit ?? null, extraction: record.extraction ?? null, questions: record.questions ?? [], coverage: record.coverage ?? null, flashcards: record.flashcards ?? [], schedule: record.schedule ?? null, research: record.research ?? null, createdAt: record.createdAt, updatedAt: record.updatedAt };
 }
 
 export async function createKit(req: Request, res: Response): Promise<void> {
@@ -170,4 +174,64 @@ export async function generateKitSchedule(req: Request, res: Response): Promise<
     await record.save();
     throw new AppError("SCHEDULE_GENERATION_FAILED", error instanceof Error ? error.message : "Could not build a valid study schedule", 422, { expose: true, cause: error });
   }
+}
+
+type KitRecordDocument = HydratedDocument<KitDocument>;
+
+async function persistPipelineProgress(record: KitRecordDocument, progress: PipelineProgress): Promise<void> {
+  const now = new Date().toISOString();
+  record.status = progress.stage;
+  record.progress = { stage: progress.stage, percent: progress.percent ?? 0, message: progress.message };
+  record.set("generation", { ...(record.generation as Record<string, unknown> | null ?? {}), status: progress.stage, stage: progress.stage, message: progress.message, percent: progress.percent ?? 0, updatedAt: now });
+  await record.save();
+}
+
+async function runCanonicalPipeline(record: KitRecordDocument): Promise<void> {
+  try {
+    const result = await generateKitPipeline({ kitId: record._id.toString(), jd: record.input?.jd ?? "", companyUrl: record.input?.company_url ?? "", daysAvailable: record.input?.days ?? 1, mode: "production" }, defaultPipelineDependencies(), (progress) => persistPipelineProgress(record, progress));
+    const now = new Date().toISOString();
+    if (result.kit && result.state) {
+      record.set("kit", result.kit);
+      record.set("research", { company: result.state.crawl, interview: result.state.interview });
+      record.set("extraction", result.state.extraction);
+      record.set("questions", result.state.questions.questions);
+      record.set("questionMetadata", result.state.questions.metadata);
+      record.set("coverage", result.state.questions.coverage);
+      record.set("flashcards", result.state.flashcards.flashcards);
+      record.set("flashcardMetadata", result.state.flashcards.metadata);
+      record.set("schedule", result.state.schedule.schedule);
+    }
+    record.status = result.status;
+    record.progress = { stage: result.status, percent: 100, message: result.status === "completed" ? "Prep kit completed" : result.status === "completed_with_warnings" ? "Prep kit completed with warnings" : result.error?.message ?? "Prep kit generation failed" };
+    record.set("warnings", result.warnings.map((item) => ({ code: item.code, message: item.message, stage: item.stage, recoverable: item.recoverable })));
+    record.set("generation", { ...(record.generation as Record<string, unknown> | null ?? {}), status: result.status, stage: result.status, updatedAt: now, completedAt: now, error: result.error ?? null, warningCodes: result.warnings.map((item) => item.code) });
+    await record.save();
+  } catch (error) {
+    const now = new Date().toISOString();
+    record.status = "failed";
+    record.progress = { stage: "failed", percent: 100, message: "Prep kit generation failed" };
+    record.set("warnings", [{ code: "PIPELINE_FAILED", message: error instanceof Error ? error.message : "Prep kit generation failed", stage: "pipeline", recoverable: false }]);
+    record.set("generation", { ...(record.generation as Record<string, unknown> | null ?? {}), status: "failed", stage: "failed", updatedAt: now, completedAt: now, error: { code: "PIPELINE_FAILED", message: "Prep kit generation failed" } });
+    await record.save();
+  }
+}
+
+export async function generateKitPipelineRequest(req: Request, res: Response): Promise<void> {
+  const ownerId = currentUserId(req);
+  const id = validKitId(req.params.id);
+  const current = await Kit.findOne({ _id: id, ownerId });
+  if (!current) throw new AppError("NOT_FOUND", "Kit not found", 404, { expose: true });
+  const env = loadEnv();
+  const generation = current.generation as { updatedAt?: string; attempt?: number } | null;
+  const staleAt = new Date(Date.now() - env.GENERATION_STALE_MINUTES * 60_000).toISOString();
+  if (isActiveGeneration(current.status) && generation?.updatedAt && generation.updatedAt >= staleAt) throw new AppError("GENERATION_ALREADY_IN_PROGRESS", "Generation is already in progress", 409, { details: { status: current.status, progress: current.progress }, expose: true });
+  const now = new Date().toISOString();
+  const locked = await Kit.findOneAndUpdate(
+    { _id: id, ownerId, $or: [{ status: { $nin: ACTIVE_GENERATION_STATUSES } }, { status: { $in: ACTIVE_GENERATION_STATUSES }, $or: [{ "generation.updatedAt": { $lt: staleAt } }, { "generation.updatedAt": { $exists: false } }] }] },
+    { $set: { status: "queued", progress: { stage: "queued", percent: 0, message: "Generation queued" }, generation: { status: "queued", stage: "queued", percent: 0, message: "Generation queued", attempt: (generation?.attempt ?? 0) + 1, startedAt: now, updatedAt: now, warnings: [] } } },
+    { new: true },
+  );
+  if (!locked) throw new AppError("GENERATION_ALREADY_IN_PROGRESS", "Generation is already in progress", 409, { expose: true });
+  void runCanonicalPipeline(locked);
+  res.status(202).json({ kit: serialize(locked) });
 }

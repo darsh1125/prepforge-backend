@@ -22,6 +22,7 @@ const envSchema = z
     RETRIEVAL_MAX_REDIRECTS: z.coerce.number().int().min(0).max(8).default(4),
     SEARCH_API_URL: z.string().url().default("https://api.search.brave.com/res/v1/web/search"),
     SEARCH_API_KEY: z.string().default(""),
+    GENERATION_STALE_MINUTES: z.coerce.number().int().positive().default(15),
   })
   .superRefine((value, ctx) => {
     if (value.NODE_ENV === "production" && value.SESSION_SECRET.length < 32) {

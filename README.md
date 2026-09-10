@@ -138,7 +138,7 @@ Production fetching must reject non-HTTP(S) URLs and private/loopback addresses 
 - `User`: `email`, `passwordHash`, timestamps. No plaintext passwords. Auth is not implemented yet.
 - `Kit`: owner, input (`jd`, `company_url`, `days`), generation `status` / `progress` / `warnings`, embedded Appendix A `kit`, editor and practice metadata, optional input fingerprint.
 
-## Current implementation status (Prompt 8)
+## Current implementation status (Prompt 9)
 
 Implemented:
 
@@ -160,6 +160,9 @@ Implemented:
 - Deterministic requirement coverage, targeted gap filling, and must-have fallback questions
 - Grounded flashcard generation with bounded repair, strict references, deduplication, and internal metadata
 - Deterministic study scheduling with exact day counts, priority scoring, integer minute allocation, and repeat review
+- Canonical dependency-injected end-to-end generation pipeline with persisted progress
+- Persistence-backed duplicate trigger protection and stale-generation recovery
+- Strict final Appendix A assembly and validation before completion
 
 Not implemented (later prompts):
 
@@ -206,6 +209,14 @@ Model drafts are validated, repaired at most once, normalized, deduplicated, che
 Category failures are partial and produce warnings without discarding successful categories. Missing requirements or research skip unsupported categories honestly. Coverage checking, targeted gap generation, regeneration, flashcards, scheduling, and final kit completion are intentionally deferred.
 
 Scraped HTML is untrusted source text. The parser removes executable/noisy elements but does not treat page text as instructions. Future LLM prompts must preserve that boundary.
+
+## Canonical generation pipeline
+
+`src/core/pipeline/generateKit.ts` is the reusable orchestration entry point for the web API and future batch evaluator. It runs company crawl, public interview research, JD extraction, question generation and coverage, flashcards, deterministic scheduling, final validation, and strict Appendix A assembly. Core code has no Express or React dependencies; the API supplies persistence and progress callbacks.
+
+`POST /api/kits/:id/generate` starts a server-side run and returns `202`. The kit document stores current `status`, `progress`, and `generation` metadata. The frontend polls `GET /api/kits/:id` every two seconds while an active stage is running, so refreshes recover the visible state. A persistence-backed atomic guard rejects fresh duplicate runs with `GENERATION_ALREADY_IN_PROGRESS`; runs older than `GENERATION_STALE_MINUTES` (default 15) may be retried.
+
+Company retrieval and public interview search are recoverable warnings. JD extraction, must-have coverage failure, schedule invariant failure, and final validation failure are fatal. Flashcard provider failure is nonfatal when questions and a valid schedule still exist. Final status becomes `completed` only after strict schema, reference, coverage, schedule, and ID validation passes.
 
 ## Coverage, flashcards, and scheduling
 
