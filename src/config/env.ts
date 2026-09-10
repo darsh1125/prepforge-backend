@@ -11,6 +11,8 @@ const envSchema = z
     SESSION_SECRET: z.string().default(""),
     WEB_ORIGIN: z.string().url().default("http://localhost:3000"),
     LLM_API_KEY: z.string().default(""),
+    LLM_MODEL: z.string().min(1).default("gpt-4o-mini"),
+    LLM_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
     BCRYPT_ROUNDS: z.coerce.number().int().min(4).max(15).default(10),
     AUTH_COOKIE_NAME: z.string().min(1).default("pf_session"),
     AUTH_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(60 * 60 * 24 * 7),

@@ -138,7 +138,7 @@ Production fetching must reject non-HTTP(S) URLs and private/loopback addresses 
 - `User`: `email`, `passwordHash`, timestamps. No plaintext passwords. Auth is not implemented yet.
 - `Kit`: owner, input (`jd`, `company_url`, `days`), generation `status` / `progress` / `warnings`, embedded Appendix A `kit`, editor and practice metadata, optional input fingerprint.
 
-## Current implementation status (Prompt 3)
+## Current implementation status (Prompt 5)
 
 Implemented:
 
@@ -155,10 +155,12 @@ Implemented:
 - Evaluator CLI command surface
 - Domain tests
 - Bounded company-site retrieval foundation with SSRF checks, redirects, robots, parsing, ranking, and partial-failure warnings
+- JD extraction with validated structured output, deterministic normalization, evidence filtering, and stable requirement IDs
 
 Not implemented (later prompts):
 
 - LLM generation, requirement extraction, and public interview research
+- Full kit generation, question generation, and public interview interpretation
 - coverage second pass, flashcards, scheduling
 - kit builder, practice mode
 - working batch evaluator output
@@ -182,6 +184,14 @@ The endpoint requires authentication and kit ownership. It returns pages, final 
 Sources retain exact URLs, titles, domains, snippets, source type, authority category, fetch time, relevance score, and bounded cleaned text (12,000 characters per source). Company-owned, first-person-public, community, secondary, and unknown provenance remain distinct. No interview rounds, coding tests, or hiring claims are fabricated from the evidence packet.
 
 `POST /api/kits/:id/research/interview` is protected by authentication and kit ownership. Results are stored in the kit's internal `research.interview` field and replace prior machine research results, making repeat clicks idempotent at the document level. Research warnings are also persisted without changing the strict Appendix A schema.
+
+## JD extraction
+
+`POST /api/kits/:id/extract` runs the narrow `extractJobDescription()` core stage using the OpenAI-compatible `LLMClient` boundary. The default provider is the OpenAI Chat Completions API with `LLM_MODEL` (default `gpt-4o-mini`), `LLM_BASE_URL`, and `LLM_API_KEY`. Tests inject a fake client and never require provider credentials.
+
+The prompt receives only the pasted JD, clearly delimited as untrusted source data. The model returns role structure only; company research and public interview sources cannot add requirements. Output is validated with Zod, retried once with validation errors for malformed JSON or invalid enums, then fails with `JD_EXTRACTION_FAILED` rather than saving invalid data. Deterministic post-processing removes duplicates, benefits, EEO/legal text, application instructions, explicit negative requirements, and unsupported hallucinated items using conservative JD evidence checks.
+
+Requirement IDs are assigned after validation in source order as `r1`, `r2`, and so on. Allowed kinds are `technical`, `behavioural`, and `domain`; allowed priorities are `must` and `nice`. Thin job descriptions remain thin, and empty results return `NO_EXPLICIT_REQUIREMENTS`. The original submitted JD character length is stored in extraction metadata as `jdChars`.
 
 Scraped HTML is untrusted source text. The parser removes executable/noisy elements but does not treat page text as instructions. Future LLM prompts must preserve that boundary.
 
