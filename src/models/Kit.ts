@@ -16,6 +16,7 @@ const kitRecordSchema = new mongoose.Schema(
     ownerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
+      required: true,
       index: true,
     },
     input: {
@@ -47,6 +48,8 @@ const kitRecordSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+kitRecordSchema.index({ ownerId: 1, updatedAt: -1 });
 
 export type KitDocument = InferSchemaType<typeof kitRecordSchema> & {
   _id: mongoose.Types.ObjectId;

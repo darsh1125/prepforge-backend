@@ -55,11 +55,14 @@ UI: `http://localhost:3000`
 | `PORT` | API port (default `5000`) |
 | `NODE_ENV` | `development` / `test` / `production` |
 | `MONGODB_URI` | MongoDB connection string (never commit secrets) |
-| `SESSION_SECRET` | Reserved for cookie sessions (Prompt 2) |
-| `WEB_ORIGIN` | Allowed frontend origin for CORS (`http://localhost:3000` locally) |
+| `SESSION_SECRET` | JWT signing secret; use at least 32 random characters in production |
+| `WEB_ORIGIN` | Allowed frontend origin for CORS and state-changing request Origin checks |
+| `AUTH_COOKIE_NAME` | HTTP-only authentication cookie name |
+| `AUTH_TOKEN_TTL_SECONDS` | Finite JWT cookie lifetime |
+| `BCRYPT_ROUNDS` | Password hashing work factor |
 | `LLM_API_KEY` | Reserved for later LLM integration; tests must not require it |
 
-CORS is origin-specific and `credentials: true` so cookie auth can be added later. Do not use wildcard origins.
+CORS is origin-specific and `credentials: true`; wildcard origins are not used. Authentication uses a signed JWT in an HTTP-only, `SameSite=Lax` cookie. Production cookies are Secure. State-changing requests also check the `Origin` header against `WEB_ORIGIN`, which provides CSRF defense for the separate frontend/backend deployment.
 
 ## Commands
 

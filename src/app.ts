@@ -3,6 +3,8 @@ import express from "express";
 import { loadEnv } from "./config/env.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { routes } from "./routes/index.js";
+import cookieParser from "cookie-parser";
+import { checkOrigin } from "./middleware/csrf.js";
 
 export function createApp() {
   const env = loadEnv();
@@ -15,6 +17,8 @@ export function createApp() {
       credentials: true,
     }),
   );
+  app.use(cookieParser());
+  app.use(checkOrigin);
   app.use(express.json({ limit: "1mb" }));
 
   app.use(routes);

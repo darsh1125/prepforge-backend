@@ -3,18 +3,35 @@ import { z } from "zod";
 
 loadDotenv();
 
-const envSchema = z.object({
-  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  PORT: z.coerce.number().int().positive().default(5000),
-  MONGODB_URI: z.string().default(""),
-  SESSION_SECRET: z.string().default(""),
-  WEB_ORIGIN: z.string().url().default("http://localhost:3000"),
-  LLM_API_KEY: z.string().default(""),
-});
+const envSchema = z
+  .object({
+    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+    PORT: z.coerce.number().int().positive().default(5000),
+    MONGODB_URI: z.string().default(""),
+    SESSION_SECRET: z.string().default(""),
+    WEB_ORIGIN: z.string().url().default("http://localhost:3000"),
+    LLM_API_KEY: z.string().default(""),
+    BCRYPT_ROUNDS: z.coerce.number().int().min(4).max(15).default(10),
+    AUTH_COOKIE_NAME: z.string().min(1).default("pf_session"),
+    AUTH_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(60 * 60 * 24 * 7),
+  })
+  .superRefine((value, ctx) => {
+    if (value.NODE_ENV === "production" && value.SESSION_SECRET.length < 32) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["SESSION_SECRET"],
+        message: "SESSION_SECRET must be at least 32 characters in production",
+      });
+    }
+  });
 
 export type AppEnv = z.infer<typeof envSchema>;
 
 let cached: AppEnv | undefined;
+
+export function resetEnvCache(): void {
+  cached = undefined;
+}
 
 export function loadEnv(): AppEnv {
   if (cached) {
@@ -29,7 +46,15 @@ export function loadEnv(): AppEnv {
     throw new Error(`Invalid environment configuration: ${details}`);
   }
 
-  cached = parsed.data;
+  const env = parsed.data;
+  if (env.NODE_ENV !== "production" && env.SESSION_SECRET.length === 0) {
+    env.SESSION_SECRET = "dev-only-session-secret-not-for-production";
+    if (env.NODE_ENV === "development") {
+      console.warn("[env] SESSION_SECRET is empty; using an insecure development default");
+    }
+  }
+
+  cached = env;
   return cached;
 }
 
