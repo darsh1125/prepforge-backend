@@ -175,6 +175,14 @@ The evaluator mode is an explicit internal `mode: "evaluator"` option for truste
 
 The endpoint requires authentication and kit ownership. It returns pages, final URLs, source tracking, metadata hints, and warnings, and persists retrieval warnings on the owned kit. It does not call an LLM or generate interview content.
 
+## Public interview research
+
+`src/core/research/interview-search.ts` provides the reusable `researchInterview()` stage. It generates a bounded, role-aware query set, calls the `SearchProvider` abstraction, validates and deduplicates normalized results, ranks likely company-specific interview evidence, and fetches up to five sources through the Prompt 3 safe fetcher. The default provider is Brave Web Search, configured with `SEARCH_API_URL` and `SEARCH_API_KEY`; tests use a fake provider, and missing provider configuration becomes a recoverable `INTERVIEW_SEARCH_UNAVAILABLE` warning.
+
+Sources retain exact URLs, titles, domains, snippets, source type, authority category, fetch time, relevance score, and bounded cleaned text (12,000 characters per source). Company-owned, first-person-public, community, secondary, and unknown provenance remain distinct. No interview rounds, coding tests, or hiring claims are fabricated from the evidence packet.
+
+`POST /api/kits/:id/research/interview` is protected by authentication and kit ownership. Results are stored in the kit's internal `research.interview` field and replace prior machine research results, making repeat clicks idempotent at the document level. Research warnings are also persisted without changing the strict Appendix A schema.
+
 Scraped HTML is untrusted source text. The parser removes executable/noisy elements but does not treat page text as instructions. Future LLM prompts must preserve that boundary.
 
 Robots rules are honored for the PrepForge user-agent and wildcard rules. Missing or unavailable robots files produce a recoverable warning and the crawler remains shallow, same-origin, low-concurrency, and rate-limited. Site terms cannot be universally interpreted automatically; operators remain responsible for applicable terms.

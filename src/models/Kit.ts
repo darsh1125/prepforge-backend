@@ -45,6 +45,7 @@ const kitRecordSchema = new mongoose.Schema(
     editorMetadata: { type: mongoose.Schema.Types.Mixed, default: {} },
     practiceMetadata: { type: mongoose.Schema.Types.Mixed, default: {} },
     inputFingerprint: { type: String, index: true },
+    research: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { timestamps: true },
 );
