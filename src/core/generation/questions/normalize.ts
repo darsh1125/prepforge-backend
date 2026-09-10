@@ -1,6 +1,6 @@
 import type { QuestionCategory, Requirement } from "../../../schemas/kit.js";
 import { questionDraftResponseSchema } from "./schemas.js";
-import type { GeneratedQuestion, QuestionDraft } from "./types.js";
+import type { GeneratedQuestion } from "./types.js";
 
 function clean(value: string): string { return value.replace(/\s+/g, " ").trim(); }
 function key(value: string): string { return clean(value).toLowerCase().replace(/^(can you|could you|please)\s+/, "").replace(/[^a-z0-9]+/g, " ").trim(); }

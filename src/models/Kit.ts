@@ -49,6 +49,7 @@ const kitRecordSchema = new mongoose.Schema(
     extraction: { type: mongoose.Schema.Types.Mixed, default: null },
     questions: { type: [mongoose.Schema.Types.Mixed], default: [] },
     questionMetadata: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    coverage: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { timestamps: true },
 );
