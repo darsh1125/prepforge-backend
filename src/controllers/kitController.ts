@@ -7,6 +7,8 @@ import { kitInputSchema, kitUpdateSchema } from "../schemas/kitInput.js";
 import { crawlCompanySite } from "../core/retrieval/crawl-company.js";
 import { researchInterview } from "../core/research/interview-search.js";
 import { extractJobDescription } from "../core/extraction/jd-extractor.js";
+import { generateAllQuestions } from "../core/generation/questions/index.js";
+import { roleSchema } from "../schemas/kit.js";
 
 function currentUserId(req: Request): string {
   if (!req.auth) throw new AppError("UNAUTHORIZED", "Authentication required", 401, { expose: true });
@@ -19,7 +21,7 @@ function validKitId(value: string | string[] | undefined): string {
 }
 
 function serialize(record: KitDocument) {
-  return { id: record._id.toString(), input: record.input, status: record.status, progress: record.progress, warnings: record.warnings, kit: record.kit ?? null, research: record.research ?? null, extraction: record.extraction ?? null, createdAt: record.createdAt, updatedAt: record.updatedAt };
+  return { id: record._id.toString(), input: record.input, status: record.status, progress: record.progress, warnings: record.warnings, kit: record.kit ?? null, extraction: record.extraction ?? null, questions: record.questions ?? [], research: record.research ?? null, createdAt: record.createdAt, updatedAt: record.updatedAt };
 }
 
 export async function createKit(req: Request, res: Response): Promise<void> {
@@ -95,4 +97,22 @@ export async function extractKitRequirements(req: Request, res: Response): Promi
   record.set("warnings", extraction.warnings.map((warning) => ({ code: warning.code, message: warning.message, stage: "extract_requirements", recoverable: warning.recoverable })));
   await record.save();
   res.json({ extraction });
+}
+
+export async function generateKitQuestions(req: Request, res: Response): Promise<void> {
+  const record = await Kit.findOne({ _id: validKitId(req.params.id), ownerId: currentUserId(req) });
+  if (!record) throw new AppError("NOT_FOUND", "Kit not found", 404, { expose: true });
+  const extraction = record.extraction as { role?: unknown } | null;
+  if (!extraction?.role) throw new AppError("ROLE_EXTRACTION_REQUIRED", "Analyze the job description before generating questions", 409, { expose: true });
+  const role = roleSchema.parse(extraction.role);
+  record.status = "generating_questions";
+  record.progress = { stage: "generating_questions", percent: 0, message: "Generating interview questions" };
+  await record.save();
+  const research = record.research as { interview?: unknown; company?: unknown } | null;
+  const result = await generateAllQuestions({ role, requirements: role.requirements, interviewResearch: research?.interview as never, companyResearch: research?.company as never });
+  record.set("questions", result.questions);
+  record.set("questionMetadata", result.metadata);
+  record.set("warnings", result.warnings.map((warning) => ({ code: warning.code, message: warning.message, stage: "generate_questions", recoverable: warning.recoverable })));
+  await record.save();
+  res.json({ questions: result.questions, metadata: result.metadata, warnings: result.warnings, status: record.status });
 }

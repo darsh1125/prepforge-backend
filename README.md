@@ -138,7 +138,7 @@ Production fetching must reject non-HTTP(S) URLs and private/loopback addresses 
 - `User`: `email`, `passwordHash`, timestamps. No plaintext passwords. Auth is not implemented yet.
 - `Kit`: owner, input (`jd`, `company_url`, `days`), generation `status` / `progress` / `warnings`, embedded Appendix A `kit`, editor and practice metadata, optional input fingerprint.
 
-## Current implementation status (Prompt 5)
+## Current implementation status (Prompt 6)
 
 Implemented:
 
@@ -156,11 +156,12 @@ Implemented:
 - Domain tests
 - Bounded company-site retrieval foundation with SSRF checks, redirects, robots, parsing, ranking, and partial-failure warnings
 - JD extraction with validated structured output, deterministic normalization, evidence filtering, and stable requirement IDs
+- Multi-stage technical, behavioural, system-design, and company-fit question generation
 
 Not implemented (later prompts):
 
 - LLM generation, requirement extraction, and public interview research
-- Full kit generation, question generation, and public interview interpretation
+- Full kit generation, coverage loops, flashcards, scheduling, and public interview interpretation
 - coverage second pass, flashcards, scheduling
 - kit builder, practice mode
 - working batch evaluator output
@@ -192,6 +193,14 @@ Sources retain exact URLs, titles, domains, snippets, source type, authority cat
 The prompt receives only the pasted JD, clearly delimited as untrusted source data. The model returns role structure only; company research and public interview sources cannot add requirements. Output is validated with Zod, retried once with validation errors for malformed JSON or invalid enums, then fails with `JD_EXTRACTION_FAILED` rather than saving invalid data. Deterministic post-processing removes duplicates, benefits, EEO/legal text, application instructions, explicit negative requirements, and unsupported hallucinated items using conservative JD evidence checks.
 
 Requirement IDs are assigned after validation in source order as `r1`, `r2`, and so on. Allowed kinds are `technical`, `behavioural`, and `domain`; allowed priorities are `must` and `nice`. Thin job descriptions remain thin, and empty results return `NO_EXPLICIT_REQUIREMENTS`. The original submitted JD character length is stored in extraction metadata as `jdChars`.
+
+## Question generation
+
+`POST /api/kits/:id/generate/questions` runs bounded category stages in deterministic order: technical, behavioural, system-design, then company-fit. Each stage receives only the context it needs and uses the existing structured LLM client. Technical, behavioural, and system-design questions must reference persisted JD requirement IDs; company-fit questions may use empty requirement references when grounded in company or public evidence.
+
+Model drafts are validated, repaired at most once, normalized, deduplicated, checked against valid requirement IDs, and assigned exported IDs `q1`, `q2`, and so on in TypeScript. Difficulty is always an integer from 1 to 3. Generated question edit metadata (`origin`, `edited`, `pinned`) is stored separately and is not exposed in the strict Appendix A question shape.
+
+Category failures are partial and produce warnings without discarding successful categories. Missing requirements or research skip unsupported categories honestly. Coverage checking, targeted gap generation, regeneration, flashcards, scheduling, and final kit completion are intentionally deferred.
 
 Scraped HTML is untrusted source text. The parser removes executable/noisy elements but does not treat page text as instructions. Future LLM prompts must preserve that boundary.
 

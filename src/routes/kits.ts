@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createKit, deleteKit, extractKitRequirements, getKit, listKits, researchCompany, researchInterviewProcess, updateKit } from "../controllers/kitController.js";
+import { createKit, deleteKit, extractKitRequirements, generateKitQuestions, getKit, listKits, researchCompany, researchInterviewProcess, updateKit } from "../controllers/kitController.js";
 import { requireAuth } from "../middleware/auth.js";
 
 export const kitsRouter = Router();
@@ -9,6 +9,7 @@ kitsRouter.get("/", listKits);
 kitsRouter.post("/:id/research/company", researchCompany);
 kitsRouter.post("/:id/research/interview", researchInterviewProcess);
 kitsRouter.post("/:id/extract", extractKitRequirements);
+kitsRouter.post("/:id/generate/questions", generateKitQuestions);
 kitsRouter.get("/:id", getKit);
 kitsRouter.patch("/:id", updateKit);
 kitsRouter.delete("/:id", deleteKit);
