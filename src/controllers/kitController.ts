@@ -10,6 +10,9 @@ import { extractJobDescription } from "../core/extraction/jd-extractor.js";
 import { generateQuestionsWithCoverage } from "../core/coverage/index.js";
 import { roleSchema } from "../schemas/kit.js";
 import { createLLMClient } from "../core/llm/client.js";
+import { generateFlashcards } from "../core/generation/flashcards/index.js";
+import { buildStudySchedule } from "../core/scheduling/index.js";
+import { questionSchema } from "../schemas/kit.js";
 
 function currentUserId(req: Request): string {
   if (!req.auth) throw new AppError("UNAUTHORIZED", "Authentication required", 401, { expose: true });
@@ -22,7 +25,7 @@ function validKitId(value: string | string[] | undefined): string {
 }
 
 function serialize(record: KitDocument) {
-  return { id: record._id.toString(), input: record.input, status: record.status, progress: record.progress, warnings: record.warnings, kit: record.kit ?? null, extraction: record.extraction ?? null, questions: record.questions ?? [], coverage: record.coverage ?? null, research: record.research ?? null, createdAt: record.createdAt, updatedAt: record.updatedAt };
+  return { id: record._id.toString(), input: record.input, status: record.status, progress: record.progress, warnings: record.warnings, kit: record.kit ?? null, extraction: record.extraction ?? null, questions: record.questions ?? [], coverage: record.coverage ?? null, flashcards: record.flashcards ?? [], schedule: record.schedule ?? null, research: record.research ?? null, createdAt: record.createdAt, updatedAt: record.updatedAt };
 }
 
 export async function createKit(req: Request, res: Response): Promise<void> {
@@ -121,4 +124,50 @@ export async function generateKitQuestions(req: Request, res: Response): Promise
   record.progress = { stage: record.status, percent: 100, message: result.status === "FULL_SUCCESS" ? "Requirement coverage complete" : result.status === "PARTIAL_SUCCESS" ? "Question generation completed with nice-to-have gaps" : "Question generation failed requirement coverage" };
   await record.save();
   res.json({ questions: result.questions, metadata: result.metadata, warnings: result.warnings, coverage: result.coverage, coverage_status: result.status, status: record.status });
+}
+
+export async function generateKitFlashcards(req: Request, res: Response): Promise<void> {
+  const record = await Kit.findOne({ _id: validKitId(req.params.id), ownerId: currentUserId(req) });
+  if (!record) throw new AppError("NOT_FOUND", "Kit not found", 404, { expose: true });
+  const extraction = record.extraction as { role?: unknown } | null;
+  if (!extraction?.role) throw new AppError("ROLE_EXTRACTION_REQUIRED", "Analyze the job description before generating flashcards", 409, { expose: true });
+  const role = roleSchema.parse(extraction.role);
+  const questions = questionSchema.array().parse(record.questions ?? []);
+  record.status = "generating_flashcards";
+  record.progress = { stage: "generating_flashcards", percent: 0, message: "Generating interview flashcards" };
+  await record.save();
+  const result = await generateFlashcards({ role, requirements: role.requirements, questions }, createLLMClient());
+  const warnings = result.warnings.map((warning) => ({ code: warning.code, message: warning.message, stage: "generate_flashcards", recoverable: warning.recoverable }));
+  if (result.ok) {
+    record.set("flashcards", result.flashcards);
+    record.set("flashcardMetadata", result.metadata);
+  }
+  record.set("warnings", [...(record.warnings ?? []), ...warnings]);
+  record.progress = { stage: "generating_flashcards", percent: 100, message: result.ok ? "Flashcards ready" : "Flashcard generation failed; existing kit content preserved" };
+  await record.save();
+  res.json({ flashcards: result.ok ? result.flashcards : record.flashcards ?? [], metadata: result.ok ? result.metadata : record.flashcardMetadata ?? [], warnings: result.warnings, status: record.status });
+}
+
+export async function generateKitSchedule(req: Request, res: Response): Promise<void> {
+  const record = await Kit.findOne({ _id: validKitId(req.params.id), ownerId: currentUserId(req) });
+  if (!record) throw new AppError("NOT_FOUND", "Kit not found", 404, { expose: true });
+  const extraction = record.extraction as { role?: unknown } | null;
+  if (!extraction?.role) throw new AppError("ROLE_EXTRACTION_REQUIRED", "Analyze the job description before building a schedule", 409, { expose: true });
+  const role = roleSchema.parse(extraction.role);
+  const questions = questionSchema.array().parse(record.questions ?? []);
+  record.status = "building_schedule";
+  record.progress = { stage: "building_schedule", percent: 0, message: "Building deterministic study schedule" };
+  await record.save();
+  try {
+    const result = buildStudySchedule({ daysAvailable: record.input?.days ?? 1, role, requirements: role.requirements, questions });
+    record.set("schedule", result.schedule);
+    record.progress = { stage: "building_schedule", percent: 100, message: "Study schedule ready" };
+    await record.save();
+    res.json({ schedule: result.schedule, status: record.status });
+  } catch (error) {
+    record.status = "failed";
+    record.progress = { stage: "failed", percent: 100, message: "Could not build a valid study schedule" };
+    await record.save();
+    throw new AppError("SCHEDULE_GENERATION_FAILED", error instanceof Error ? error.message : "Could not build a valid study schedule", 422, { expose: true, cause: error });
+  }
 }

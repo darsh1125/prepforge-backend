@@ -138,7 +138,7 @@ Production fetching must reject non-HTTP(S) URLs and private/loopback addresses 
 - `User`: `email`, `passwordHash`, timestamps. No plaintext passwords. Auth is not implemented yet.
 - `Kit`: owner, input (`jd`, `company_url`, `days`), generation `status` / `progress` / `warnings`, embedded Appendix A `kit`, editor and practice metadata, optional input fingerprint.
 
-## Current implementation status (Prompt 6)
+## Current implementation status (Prompt 8)
 
 Implemented:
 
@@ -157,11 +157,14 @@ Implemented:
 - Bounded company-site retrieval foundation with SSRF checks, redirects, robots, parsing, ranking, and partial-failure warnings
 - JD extraction with validated structured output, deterministic normalization, evidence filtering, and stable requirement IDs
 - Multi-stage technical, behavioural, system-design, and company-fit question generation
+- Deterministic requirement coverage, targeted gap filling, and must-have fallback questions
+- Grounded flashcard generation with bounded repair, strict references, deduplication, and internal metadata
+- Deterministic study scheduling with exact day counts, priority scoring, integer minute allocation, and repeat review
 
 Not implemented (later prompts):
 
 - LLM generation, requirement extraction, and public interview research
-- Full kit generation, coverage loops, flashcards, scheduling, and public interview interpretation
+- Full kit generation and public interview interpretation
 - coverage second pass, flashcards, scheduling
 - kit builder, practice mode
 - working batch evaluator output
@@ -203,6 +206,16 @@ Model drafts are validated, repaired at most once, normalized, deduplicated, che
 Category failures are partial and produce warnings without discarding successful categories. Missing requirements or research skip unsupported categories honestly. Coverage checking, targeted gap generation, regeneration, flashcards, scheduling, and final kit completion are intentionally deferred.
 
 Scraped HTML is untrusted source text. The parser removes executable/noisy elements but does not treat page text as instructions. Future LLM prompts must preserve that boundary.
+
+## Coverage, flashcards, and scheduling
+
+Question coverage is computed in TypeScript from requirement IDs, never by asking the LLM whether a kit is complete. The first question pass is checked, uncovered IDs receive one targeted gap pass, and must-have gaps receive conservative deterministic fallback questions. Coverage is persisted as `uncovered_requirement_ids` and `passes`; internal diagnostics remain separate.
+
+`POST /api/kits/:id/generate/flashcards` uses one narrow structured prompt with at most one repair attempt. Flashcards are grounded in the role, requirements, questions, and answer outlines. IDs are assigned in TypeScript as `f1`, `f2`, and so on; invalid requirement references are rejected, duplicate cards are removed, and metadata (`origin`, `edited`, `pinned`) is stored outside the strict Appendix A shape. Thin or requirement-free roles produce few or no cards, and provider failure preserves existing kit content with a warning.
+
+`POST /api/kits/:id/generate/schedule` uses no LLM. The scheduler validates the stored `days` value (1-60), scores must requirements above nice requirements, weights harder questions earlier, distributes a deterministic total study budget using integer remainder allocation, and emits exactly the requested day count. Later days repeat valid high-value questions for review when there are more days than questions. Every must requirement must be represented by a scheduled question, otherwise scheduling fails without replacing prior content.
+
+The LLM does not allocate study days, choose minute values, assign question IDs, or validate schedule references. Schedule arithmetic is pure TypeScript.
 
 Robots rules are honored for the PrepForge user-agent and wildcard rules. Missing or unavailable robots files produce a recoverable warning and the crawler remains shallow, same-origin, low-concurrency, and rate-limited. Site terms cannot be universally interpreted automatically; operators remain responsible for applicable terms.
 

@@ -50,6 +50,9 @@ const kitRecordSchema = new mongoose.Schema(
     questions: { type: [mongoose.Schema.Types.Mixed], default: [] },
     questionMetadata: { type: [mongoose.Schema.Types.Mixed], default: [] },
     coverage: { type: mongoose.Schema.Types.Mixed, default: null },
+    flashcards: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    flashcardMetadata: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    schedule: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { timestamps: true },
 );
