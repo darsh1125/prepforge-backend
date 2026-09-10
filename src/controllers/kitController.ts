@@ -4,6 +4,7 @@ import { AppError } from "../core/errors/appError.js";
 import { createInputFingerprint } from "../core/fingerprint.js";
 import { Kit, type KitDocument } from "../models/Kit.js";
 import { kitInputSchema, kitUpdateSchema } from "../schemas/kitInput.js";
+import { crawlCompanySite } from "../core/retrieval/crawl-company.js";
 
 function currentUserId(req: Request): string {
   if (!req.auth) throw new AppError("UNAUTHORIZED", "Authentication required", 401, { expose: true });
@@ -53,4 +54,15 @@ export async function deleteKit(req: Request, res: Response): Promise<void> {
   const deleted = await Kit.findOneAndDelete({ _id: validKitId(req.params.id), ownerId: currentUserId(req) });
   if (!deleted) throw new AppError("NOT_FOUND", "Kit not found", 404, { expose: true });
   res.json({ success: true });
+}
+
+export async function researchCompany(req: Request, res: Response): Promise<void> {
+  const record = await Kit.findOne({ _id: validKitId(req.params.id), ownerId: currentUserId(req) });
+  if (!record) throw new AppError("NOT_FOUND", "Kit not found", 404, { expose: true });
+  const companyUrl = record.input?.company_url;
+  if (!companyUrl) throw new AppError("CONFLICT", "Kit does not have a company URL", 409, { expose: true });
+  const result = await crawlCompanySite({ companyUrl, mode: "production" });
+  record.set("warnings", result.warnings.map((warning) => ({ code: warning.code, message: warning.message, stage: warning.stage, recoverable: warning.recoverable })));
+  await record.save();
+  res.json({ research: result });
 }

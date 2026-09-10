@@ -138,7 +138,7 @@ Production fetching must reject non-HTTP(S) URLs and private/loopback addresses 
 - `User`: `email`, `passwordHash`, timestamps. No plaintext passwords. Auth is not implemented yet.
 - `Kit`: owner, input (`jd`, `company_url`, `days`), generation `status` / `progress` / `warnings`, embedded Appendix A `kit`, editor and practice metadata, optional input fingerprint.
 
-## Current implementation status (Prompt 1)
+## Current implementation status (Prompt 3)
 
 Implemented:
 
@@ -154,14 +154,30 @@ Implemented:
 - Shared `generateKit()` stub
 - Evaluator CLI command surface
 - Domain tests
+- Bounded company-site retrieval foundation with SSRF checks, redirects, robots, parsing, ranking, and partial-failure warnings
 
 Not implemented (later prompts):
 
-- registration / login / sessions
-- crawler, research, LLM generation
+- LLM generation, requirement extraction, and public interview research
 - coverage second pass, flashcards, scheduling
 - kit builder, practice mode
 - working batch evaluator output
+
+## Company retrieval
+
+`src/core/retrieval/crawl-company.ts` exposes the framework-independent `crawlCompanySite()` entry point. It validates the supplied URL, fetches the homepage, reads `robots.txt`, extracts same-host links from actual HTML, ranks those links by deterministic relevance signals, and fetches a small bounded set. It does not probe fixed paths such as `/careers`; a nonstandard linked path such as `/company/join-us` is discovered through the page itself.
+
+Production retrieval accepts only HTTP(S), rejects loopback/private/link-local/metadata targets, checks DNS resolution, validates every redirect, uses a finite timeout and response byte limit, and processes only HTML or plain text. Redirects are handled manually with a small maximum. Transient 429/502/503/504 and network failures receive limited exponential backoff retries.
+
+The evaluator mode is an explicit internal `mode: "evaluator"` option for trusted local fixtures such as `http://localhost:8099/acme/`. It is not exposed as a public request-body flag and must not be used for normal web traffic. The protected development endpoint always uses production mode:
+
+`POST /api/kits/:id/research/company`
+
+The endpoint requires authentication and kit ownership. It returns pages, final URLs, source tracking, metadata hints, and warnings, and persists retrieval warnings on the owned kit. It does not call an LLM or generate interview content.
+
+Scraped HTML is untrusted source text. The parser removes executable/noisy elements but does not treat page text as instructions. Future LLM prompts must preserve that boundary.
+
+Robots rules are honored for the PrepForge user-agent and wildcard rules. Missing or unavailable robots files produce a recoverable warning and the crawler remains shallow, same-origin, low-concurrency, and rate-limited. Site terms cannot be universally interpreted automatically; operators remain responsible for applicable terms.
 
 ## Honesty
 

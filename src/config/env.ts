@@ -14,6 +14,10 @@ const envSchema = z
     BCRYPT_ROUNDS: z.coerce.number().int().min(4).max(15).default(10),
     AUTH_COOKIE_NAME: z.string().min(1).default("pf_session"),
     AUTH_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(60 * 60 * 24 * 7),
+    RETRIEVAL_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
+    RETRIEVAL_MAX_BYTES: z.coerce.number().int().positive().default(4 * 1024 * 1024),
+    RETRIEVAL_MAX_PAGES: z.coerce.number().int().positive().max(20).default(7),
+    RETRIEVAL_MAX_REDIRECTS: z.coerce.number().int().min(0).max(8).default(4),
   })
   .superRefine((value, ctx) => {
     if (value.NODE_ENV === "production" && value.SESSION_SECRET.length < 32) {
