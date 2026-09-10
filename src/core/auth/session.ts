@@ -11,7 +11,7 @@ export function safeUser(user: { _id: { toString(): string }; email: string }): 
 
 function cookieOptions(): CookieOptions {
   const env = loadEnv();
-  return { httpOnly: true, secure: isProduction(env), sameSite: "lax", path: "/", maxAge: env.AUTH_TOKEN_TTL_SECONDS * 1000 };
+  return { httpOnly: true, secure: isProduction(env), sameSite: isProduction(env) ? "none" : "lax", path: "/", maxAge: env.AUTH_TOKEN_TTL_SECONDS * 1000 };
 }
 
 export function setSessionCookie(res: Response, user: SafeUser): void {

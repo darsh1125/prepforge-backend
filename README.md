@@ -62,7 +62,7 @@ UI: `http://localhost:3000`
 | `BCRYPT_ROUNDS` | Password hashing work factor |
 | `LLM_API_KEY` | OpenAI-compatible provider key for extraction and generation; tests must not require it |
 
-CORS is origin-specific and `credentials: true`; wildcard origins are not used. Authentication uses a signed JWT in an HTTP-only, `SameSite=Lax` cookie. Production cookies are Secure. State-changing requests also check the `Origin` header against `WEB_ORIGIN`, which provides CSRF defense for the separate frontend/backend deployment.
+CORS is origin-specific and `credentials: true`; wildcard origins are not used. Authentication uses a signed JWT in an HTTP-only cookie. Local development uses `SameSite=Lax`; production uses `SameSite=None; Secure` because the frontend and backend may have different sites. State-changing production requests require the exact `Origin` header configured in `WEB_ORIGIN`, which provides CSRF defense for the separate deployment.
 
 ## Commands
 
@@ -191,7 +191,7 @@ Implemented:
 - User and Kit models
 - Appendix A Zod schemas and referential integrity
 - Generation status / warning types
-- LLM client interface (unimplemented)
+- OpenAI-compatible structured LLM client boundary with injectable test doubles
 - URL policy boundary
 - Shared dependency-injected `generateKitPipeline()`
 - Evaluator CLI command surface
@@ -276,3 +276,7 @@ Robots rules are honored for the PrepForge user-agent and wildcard rules. Missin
 ## Honesty
 
 Thin job descriptions produce thin kits. Missing pages are reported, not invented.
+
+## Deployment
+
+Deploy this repository as a long-running Node.js service with Node 20+, `npm ci`, `npm run build`, and `npm start`. Configure `NODE_ENV=production`, `MONGODB_URI`, a strong unique `SESSION_SECRET`, the exact deployed frontend `WEB_ORIGIN`, `LLM_API_KEY`, and `SEARCH_API_KEY` in the host environment. Do not commit production values. The frontend must call this service through its public `NEXT_PUBLIC_API_URL`; the API uses credentialed CORS and production `SameSite=None; Secure` cookies for cross-site deployments. Verify `/health`, registration, login, refresh, logout, ownership isolation, and one real generation after deployment.
