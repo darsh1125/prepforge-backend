@@ -3,6 +3,7 @@ import { createKit, deleteKit, extractKitRequirements, generateKitFlashcards, ge
 import { requireAuth } from "../middleware/auth.js";
 import { createFlashcard, createQuestion, deleteFlashcard, deleteQuestion, pinFlashcard, pinQuestion, reorderQuestions, updateCompanyBrief, updateFlashcard, updateQuestion } from "../controllers/builderController.js";
 import { regenerateCompanyBriefEndpoint, regenerateQuestionCategoryEndpoint, regenerateScheduleEndpoint } from "../controllers/regenerationController.js";
+import { getPracticeSession, updatePracticeConfidence } from "../controllers/practiceController.js";
 
 export const kitsRouter = Router();
 kitsRouter.use(requireAuth);
@@ -16,6 +17,8 @@ kitsRouter.post("/:id/generate", generateKitPipelineRequest);
 kitsRouter.post("/:id/generate/flashcards", generateKitFlashcards);
 kitsRouter.post("/:id/generate/schedule", generateKitSchedule);
 kitsRouter.patch("/:id/company-brief", updateCompanyBrief);
+kitsRouter.get("/:id/practice", getPracticeSession);
+kitsRouter.patch("/:id/practice/:flashcardInternalId", updatePracticeConfidence);
 kitsRouter.post("/:id/regenerate/company-brief", regenerateCompanyBriefEndpoint);
 kitsRouter.post("/:id/regenerate/questions/:category", regenerateQuestionCategoryEndpoint);
 kitsRouter.post("/:id/regenerate/schedule", regenerateScheduleEndpoint);

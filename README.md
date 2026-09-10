@@ -125,6 +125,12 @@ Builder routes:
 
 These routes return the updated builder state plus the strict `kit` Appendix A projection. Internal metadata is returned only as separate top-level editor state and never appears inside questions, flashcards, or the company brief source list.
 
+### Flashcard Practice (Prompt 12)
+
+Practice state is stored in the separate `PracticeState` collection, keyed by kit owner, kit, and stable flashcard `internalId`. It contains nullable confidence (`1`, `2`, `3`, or `null`), practice count, and last-practiced time; it never enters Appendix A. Editing a card preserves its history because the internal identity remains stable. Deleting a card removes its practice record, and orphaned records are excluded from sessions.
+
+`GET /api/kits/:id/practice` returns the current cards, internal practice DTOs, and aggregate stats. `PATCH /api/kits/:id/practice/:flashcardInternalId` accepts only `{ confidence: 1 | 2 | 3 }`; the backend owns timestamps and increments `practiceCount` atomically. Sessions sort deterministically: unpracticed first, then confidence 1/2/3, oldest practice time first, then stable builder order. Practice does not change the builder revision, coverage, schedule, or call an LLM.
+
 ### Section Regeneration (Prompt 11)
 
 Regeneration is deliberately separate from `generateKitPipeline()`. The reusable services in `src/core/regeneration/` are:
