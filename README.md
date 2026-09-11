@@ -1,282 +1,329 @@
-# PrepForge Backend
+﻿# PrepForge Backend
 
-Backend for **PrepForge**, an AI-powered interview preparation application.
+PrepForge is an AI interview-preparation kit generator. This repository contains the Express API, MongoDB persistence, retrieval and research boundaries, LLM orchestration, deterministic coverage and scheduling logic, authentication, and the batch evaluator.
 
-This repository is the HTTP API, persistence layer, and the **single shared generation pipeline**. The frontend lives in a separate repository:
+## Live Services
 
-https://github.com/darsh1125/prepforge-frontend
+- Frontend: https://prepforge-frontend.netlify.app
+- Backend API: https://prepforge-backend-pha6.onrender.com
+- Frontend repository: https://github.com/darsh1125/prepforge-frontend
+- Backend repository: https://github.com/darsh1125/prepforge-backend
+- Health check: https://prepforge-backend-pha6.onrender.com/health
 
-Do not merge these projects into a monorepo.
+The frontend and backend remain separate repositories. MongoDB Atlas stores application state, Groq provides the OpenAI-compatible LLM endpoint, and Brave Search is an optional public-interview research provider.
 
-## Stack
+## Technology
 
-- Node.js
-- Express
-- TypeScript (strict)
-- MongoDB + Mongoose
-- Zod
-- Vitest
+The versions are defined in `package.json`:
 
-## Local setup
+- Node.js `>=20`
+- Express `5.1.0`
+- TypeScript `^5.9.2`
+- MongoDB with Mongoose `^8.18.0`
+- Zod `^3.24.2` for request and output schemas
+- `bcryptjs` for password hashing
+- `jsonwebtoken` and `cookie-parser` for sessions
+- Vitest, Supertest, and MongoDB Memory Server for tests
+- Cheerio for bounded HTML cleaning and link extraction
 
-```bash
+Express owns HTTP concerns, Mongoose owns persistence, Zod validates boundaries, and the framework-independent `src/core` modules contain retrieval, generation, coverage, scheduling, validation, and practice logic.
+
+## Local Setup
+
+~~~bash
+git clone https://github.com/darsh1125/prepforge-backend.git
 cd prepforge-backend
+npm ci
+~~~
+
+Create the environment file:
+
+Windows:
+
+~~~powershell
+copy .env.example .env
+~~~
+
+macOS/Linux:
+
+~~~bash
 cp .env.example .env
-npm install
-```
+~~~
 
-Fill `MONGODB_URI` when you need persistence. Health checks work without MongoDB.
+For authentication and kits, provide a local MongoDB URI. Health checks and some unit tests do not require a running MongoDB instance.
 
-### Development workflow
+Start the API:
 
-Terminal 1 (this repo):
-
-```bash
+~~~bash
 npm run dev
-```
+~~~
 
-API base: `http://localhost:5000`
+The default API is http://localhost:5000 and the health endpoint is http://localhost:5000/health. Run the separate frontend with `NEXT_PUBLIC_API_URL=http://localhost:5000`.
 
-Health: `http://localhost:5000/health`
+## Environment Variables
 
-Terminal 2 (frontend repo):
+| Variable | Required | Purpose | Example |
+| --- | --- | --- | --- |
+| `PORT` | No | HTTP port; Render supplies this in production | `5000` |
+| `NODE_ENV` | No | `development`, `test`, or `production` | `development` |
+| `MONGODB_URI` | For persistence | MongoDB connection string | `mongodb://127.0.0.1:27017/prepforge` |
+| `SESSION_SECRET` | Production | JWT signing secret; at least 32 characters in production | placeholder only |
+| `WEB_ORIGIN` | Browser use | Exact frontend origin for CORS and Origin checks | `http://localhost:3000` |
+| `AUTH_COOKIE_NAME` | No | HTTP-only session cookie name | `pf_session` |
+| `AUTH_TOKEN_TTL_SECONDS` | No | Session lifetime | `604800` |
+| `BCRYPT_ROUNDS` | No | Password hashing work factor | `10` |
+| `RETRIEVAL_TIMEOUT_MS` | No | Per-fetch timeout | `10000` |
+| `RETRIEVAL_MAX_BYTES` | No | Maximum response body size | `4194304` |
+| `RETRIEVAL_MAX_PAGES` | No | Maximum company pages | `7` |
+| `RETRIEVAL_MAX_REDIRECTS` | No | Maximum redirects per fetch | `4` |
+| `LLM_API_KEY` | Generation | Groq API key; tests can use injected clients | empty locally until configured |
+| `LLM_MODEL` | Generation | OpenAI-compatible model name | `openai/gpt-oss-20b` |
+| `LLM_BASE_URL` | Generation | OpenAI-compatible provider base URL | `https://api.groq.com/openai/v1` |
+| `SEARCH_API_URL` | No | Search provider endpoint | `https://api.search.brave.com/res/v1/web/search` |
+| `SEARCH_API_KEY` | No | Optional Brave Search key | empty |
+| `GENERATION_STALE_MINUTES` | No | Age after which an active generation can be retried | `15` |
 
-```bash
-cd prepforge-frontend
+Never commit `.env`, production MongoDB credentials, provider keys, or real session secrets. `LLM_API_KEY` and `SEARCH_API_KEY` are read only by the backend.
+
+## Exact Commands
+
+~~~bash
 npm run dev
-```
-
-UI: `http://localhost:3000`
-
-## Environment variables
-
-| Variable | Purpose |
-| --- | --- |
-| `PORT` | API port (default `5000`) |
-| `NODE_ENV` | `development` / `test` / `production` |
-| `MONGODB_URI` | MongoDB connection string (never commit secrets) |
-| `SESSION_SECRET` | JWT signing secret; use at least 32 random characters in production |
-| `WEB_ORIGIN` | Allowed frontend origin for CORS and state-changing request Origin checks |
-| `AUTH_COOKIE_NAME` | HTTP-only authentication cookie name |
-| `AUTH_TOKEN_TTL_SECONDS` | Finite JWT cookie lifetime |
-| `BCRYPT_ROUNDS` | Password hashing work factor |
-| `LLM_API_KEY` | OpenAI-compatible provider key for extraction and generation; tests must not require it |
-
-CORS is origin-specific and `credentials: true`; wildcard origins are not used. Authentication uses a signed JWT in an HTTP-only cookie. Local development uses `SameSite=Lax`; production uses `SameSite=None; Secure` because the frontend and backend may have different sites. State-changing production requests require the exact `Origin` header configured in `WEB_ORIGIN`, which provides CSRF defense for the separate deployment.
-
-## Commands
-
-```bash
-npm run dev
-npm run build
-npm run start
 npm run lint
 npm run typecheck
 npm run test
-npm run evaluate -- --input <cases.json> --output <kits.json>
-```
-
-The evaluator is a Mongo-free batch entry point over the same `generateKitPipeline()` used by the web API:
-
-```bash
-npm run evaluate -- --input cases.json --output kits.json
-```
-
-The input is a JSON array of `{ id, jd, company_url, days }` cases. Output is the exact Appendix B envelope with `version: "1.0"`, an ISO `generated_at`, and one ordered `ok` or `failed` result per input ID. Invalid IDs or duplicate IDs fail the whole invocation; invalid fields on an identified case become a failed result while the remaining cases continue. Output is written atomically and parent directories are created when needed. Evaluator retrieval uses the explicit internal `evaluation` mode so localhost fixtures can work without weakening production SSRF policy. Cases run with a bounded concurrency of two.
+npm run build
+npm run start
+~~~
 
 ## Architecture
 
-```
-prepforge-frontend  --HTTP JSON-->  prepforge-backend
-                                         |
-                                         +--> MongoDB
-                                         +--> retrieval / research
-                                         +--> LLM provider
-                                         +--> deterministic core
-```
+~~~text
+src/
+  app.ts, server.ts              Express composition and startup
+  routes/                        HTTP route registration
+  controllers/                   auth, kit, builder, practice, and health handlers
+  middleware/                    auth, CSRF/Origin, and error handling
+  models/                        User, Kit, and PracticeState Mongoose models
+  schemas/                       Zod request, Appendix A, builder, and practice schemas
+  config/                        environment and database connection
+  core/
+    auth/                        signed session helpers
+    retrieval/                   URL policy, fetch, robots, cleaning, links, ranking
+    research/                    public interview search and source cleaning/ranking
+    extraction/                  JD prompts, validation, normalization, IDs
+    generation/                  question and flashcard generation
+    coverage/                    deterministic coverage and gap filling
+    scheduling/                  deterministic priority and minute allocation
+    regeneration/                preservation-aware section regeneration
+    builder/                     revision and editor metadata helpers
+    practice/                    confidence sorting and aggregate stats
+    validation/                  Appendix A and referential validation
+    pipeline/                    shared end-to-end generation orchestration
+  cli/                            batch evaluator
+tests/                             domain, security, evaluator, and contract tests
+~~~
 
-### Shared pipeline
+The web API and CLI evaluator share `src/core/pipeline/generateKit.ts`. The core pipeline has no Express or React dependency. The CLI does not create a second fake generation implementation.
 
-`src/core/pipeline/generateKit.ts` is the **only** generation entry point.
+## LLM Responsibilities
 
-```
-Express API  \
-               ---> generateKit(...)
-CLI evaluator /
-```
+The deployed provider is Groq through its OpenAI-compatible Chat Completions API:
 
-The CLI maps each case to `{ jd, companyUrl, daysAvailable, mode: "evaluation" }` and invokes this same in-memory pipeline. It does not start Express, connect to MongoDB, or include editor/practice metadata in output. Schedule allocation, coverage, IDs, final validation, and Appendix A assembly remain deterministic core work.
+~~~env
+LLM_MODEL=openai/gpt-oss-20b
+LLM_BASE_URL=https://api.groq.com/openai/v1
+~~~
 
-`src/core` is framework-independent: no Express `Request`/`Response`, no React, no Next.js.
+The LLM handles structured semantic work:
 
-Pipeline stages: extract requirements → fetch homepage → discover/rank/retrieve pages → research interview process → generate questions → deterministic coverage → gap fill → flashcards → deterministic schedule → validate → persist.
+- Extracting role structure and explicit JD requirements
+- Generating categorized interview questions and answer outlines
+- Generating grounded flashcards
+- Targeted gap-question generation after deterministic coverage detects missing requirements
 
-### Strict Appendix A contract
+The company brief is assembled deterministically from retrieved company text and source URLs. The LLM does not decide requirement coverage, assign exported IDs, allocate days or minutes, validate references, or decide whether the final kit satisfies Appendix A.
 
-The evaluator kit shape is defined in `src/schemas/kit.ts` (Zod + inferred TypeScript types). Re-exports live in `src/types/kit.ts`. Future evaluator I/O types live in `src/types/evaluator.ts`. Field names are exact (`company_brief`, `company_url`, `jd_chars`, `pages_used`, `requirement_ids`, `days_available`, `question_ids`, `uncovered_requirement_ids`).
+## Generation Pipeline
 
-Internal MongoDB documents may include `ownerId`, `status`, `progress`, `warnings`, `editorMetadata`, `practiceMetadata`, and `inputFingerprint`. Those fields must **not** be injected into Appendix A when exporting.
+The actual canonical order in `src/core/pipeline/generateKit.ts` is:
 
-### Kit Builder (Prompt 10)
+1. Validate preparation days and the company URL policy.
+2. Crawl the supplied company URL, discover and rank same-host links, and collect recoverable retrieval warnings.
+3. Research public interview evidence with bounded search and source fetching.
+4. Extract role structure and requirements from the pasted JD.
+5. Generate technical, behavioural, system-design, and company-fit questions in deterministic category order.
+6. Validate question references and compute requirement coverage in TypeScript.
+7. Run one targeted gap pass for uncovered requirements, then deterministic must-have fallback questions when needed.
+8. Fail the pipeline if a must-have requirement remains uncovered; nice-to-have gaps can remain as warnings.
+9. Generate grounded flashcards.
+10. Allocate a deterministic study schedule with the requested number of days.
+11. Validate Appendix A structure, IDs, references, coverage, and schedule invariants.
+12. Return the kit; the web controller persists progress, warnings, generation state, and final state in MongoDB.
 
-The protected builder endpoints edit only owned kits and require `expectedRevision` on every mutation. A successful mutation increments `revision`; stale writes return `KIT_VERSION_CONFLICT` (HTTP 409). Backend validation owns field limits, allowed categories, requirement references, unique reorder IDs, and immutable company source URLs.
+The sequence is staged so each boundary can validate its output, missing research can be represented honestly, deterministic operations cannot be overridden by model text, and provider failures do not corrupt an already valid section.
 
-Questions and flashcards retain stable exported IDs. Internal metadata stores a separate UUID identity, origin (`generated` or `user`), edited state, pin state, and order. Deleted IDs are reserved so later additions do not reuse an exported ID. Question edits update deterministic coverage; schedules are rebuilt when valid, or marked stale when must-have coverage is lost. Reordering preserves schedule and coverage content while persisting the new order.
+## Retrieval and Research
 
-Builder routes:
+`src/core/retrieval/crawl-company.ts` starts from the supplied URL, fetches the homepage, cleans HTML, extracts relative and absolute links, ranks same-host candidates, and follows a bounded depth-one crawl. Defaults are a 10-second timeout, 4 MiB response limit, 7 pages, 4 redirects, two retries for transient failures, and a 50 ms request delay. Only `text/html` and `text/plain` are processed.
 
-- `PATCH /api/kits/:id/company-brief`
-- `POST|PATCH|DELETE /api/kits/:id/questions` and `PATCH /api/kits/:id/questions/reorder`
-- `PATCH /api/kits/:id/questions/:questionId/pin`
-- `POST|PATCH|DELETE /api/kits/:id/flashcards`
-- `PATCH /api/kits/:id/flashcards/:flashcardId/pin`
+Redirects are manually followed and rechecked against the URL policy. Production rejects non-HTTP(S), loopback, private, link-local, metadata, and hostnames resolving to private addresses. `robots.txt` rules for `*` and the PrepForge user agent are honored. Missing or unavailable robots files produce a recoverable warning. Hiring/careers pages are discovered from links and ranked; fixed-path probing is not used.
 
-These routes return the updated builder state plus the strict `kit` Appendix A projection. Internal metadata is returned only as separate top-level editor state and never appears inside questions, flashcards, or the company brief source list.
+`src/core/research/interview-search.ts` uses the `SearchProvider` abstraction. The default is Brave Web Search, configured by `SEARCH_API_URL` and `SEARCH_API_KEY`. It generates at most five role-aware queries, normalizes and deduplicates results, ranks them, and fetches up to five sources through the safe fetcher. Official company pages, public first-person reports, community/forum sources, secondary blogs, and unknown sources retain separate authority labels. Missing search credentials or unavailable public evidence becomes a warning, not fabricated company policy.
 
-### Flashcard Practice (Prompt 12)
+All job descriptions, crawled pages, snippets, and search results are untrusted source data. Prompts delimit source content and instruct the model not to follow embedded commands. HTML executable/noisy elements are removed before use, but external text is never treated as trusted application instructions.
 
-Practice state is stored in the separate `PracticeState` collection, keyed by kit owner, kit, and stable flashcard `internalId`. It contains nullable confidence (`1`, `2`, `3`, or `null`), practice count, and last-practiced time; it never enters Appendix A. Editing a card preserves its history because the internal identity remains stable. Deleting a card removes its practice record, and orphaned records are excluded from sessions.
+## Requirement Extraction and Coverage
 
-`GET /api/kits/:id/practice` returns the current cards, internal practice DTOs, and aggregate stats. `PATCH /api/kits/:id/practice/:flashcardInternalId` accepts only `{ confidence: 1 | 2 | 3 }`; the backend owns timestamps and increments `practiceCount` atomically. Sessions sort deterministically: unpracticed first, then confidence 1/2/3, oldest practice time first, then stable builder order. Practice does not change the builder revision, coverage, schedule, or call an LLM.
+`src/core/extraction/jd-extractor.ts` validates structured model output, keeps only requirements supported by the pasted JD, and preserves thin JDs as thin. Requirements are normalized with:
 
-### Section Regeneration (Prompt 11)
+- `id`: stable exported IDs such as `r1`, `r2`
+- `text`: requirement text
+- `kind`: `technical`, `behavioural`, or `domain`
+- `priority`: `must` or `nice`
 
-Regeneration is deliberately separate from `generateKitPipeline()`. The reusable services in `src/core/regeneration/` are:
+Benefits, legal text, application instructions, negative requirements, and unsupported model inventions are filtered by deterministic normalization.
 
-- `regenerateCompanyBrief()`: derives a fresh brief from persisted company/interview evidence, preserving manually edited fields and replacing the source list with the evidence actually used.
-- `regenerateQuestionCategory()`: partitions the selected category by current metadata, generates only replacement candidates, deduplicates against preserved prompts, preserves surviving exported IDs, and allocates new IDs above the current/deleted maximum.
-- `regenerateSchedule()`: calls only the deterministic scheduler and performs zero LLM calls.
+`src/core/coverage/check-coverage.ts` builds a requirement-to-question map from `question.requirement_ids`. Covered and uncovered IDs are computed in TypeScript. The first pass is followed by one targeted gap pass. Remaining uncovered must-have requirements receive conservative deterministic fallback questions. A successful final kit cannot contain an uncovered must-have; a nice-to-have gap may remain with a warning.
 
-For category regeneration, `origin=user`, `edited=true`, and `pinned=true` are preservation conditions. Preserve wins when multiple conditions apply. Other categories, flashcards, research, and extracted requirements are untouched. New questions are generated with `origin=generated`, `edited=false`, `pinned=false`, fresh internal IDs, and appended within the selected category. Coverage is recomputed across the complete question set; only must-have gaps induced by the replacement are targeted for bounded repair. Pre-existing gaps are reported but are not silently repaired.
+## Scheduling
 
-Candidate generation and validation complete before the document is mutated. Provider failure or invalid output leaves the old section intact. All regeneration mutations require `expectedRevision`, enforce ownership and the category enum, and return `KIT_VERSION_CONFLICT` for stale clients. Endpoints are `POST /api/kits/:id/regenerate/company-brief`, `POST /api/kits/:id/regenerate/questions/:category`, and `POST /api/kits/:id/regenerate/schedule`.
+`src/core/scheduling/build-schedule.ts` never calls the LLM. It validates the input, scores must requirements above nice requirements and harder questions above easier ones, prioritizes questions, and allocates a bounded study budget using integer remainder allocation. It emits exactly the requested number of days, sequential day numbers, a focus string, integer minutes, and question IDs.
 
-### Deterministic vs LLM work
+For one day, one schedule day is emitted. For longer windows, questions are distributed across days and repeated for review when there are more days than questions. The supported range is 1-60 days. Schedule validation rejects invalid references, day counts, day ordering, non-integer minutes, and schedules that fail must-have coverage.
 
-Must stay TypeScript (no LLM):
+## Appendix A and Persistence
 
-- coverage comparison
-- schedule allocation
-- ID generation
-- referential integrity
-- schema validation
-- retry policy mechanics
-- state preservation mechanics
+`src/schemas/kit.ts` defines the strict Appendix A contract and `src/core/validation/kit.ts` validates it before completion. Referential integrity checks verify requirement, question, flashcard, and schedule references. Internal persistence fields are kept outside the exported kit projection.
 
-LLM (later, specialized stages, not one giant prompt):
+MongoDB models persist:
 
-- requirement extraction
-- company / interview-process interpretation
-- question and flashcard content
+- `User`: normalized email and bcrypt password hash
+- `Kit`: owner, input, progress, warnings, generation status, research, extraction, questions, metadata, coverage, flashcards, schedule, revisions, and the Appendix A-shaped kit
+- `PracticeState`: owner/kit/card identity, confidence, practice count, and last-practiced time
 
-Warnings vs fatal failures: missing hiring pages or public interview discussion should become warnings (`completed_with_warnings`). `failed` is only for runs that cannot produce a usable kit.
+Question and flashcard metadata uses stable internal IDs plus `origin`, `edited`, `pinned`, and `order`. User-created, edited, and pinned items are preserved during category regeneration. Untouched generated items may be replaced. Deleted export IDs are reserved so later additions do not reuse them. Builder mutations require `expectedRevision`; stale writes return HTTP 409.
 
-## Retrieval security
+## Authentication and Security
 
-Production fetching must reject non-HTTP(S) URLs and private/loopback addresses (SSRF). The CLI evaluator uses a **narrow** `evaluator` fetch mode so fixtures such as `http://localhost:8099/acme/` can be allowed. There is no global “disable SSRF” switch. See `src/core/retrieval/urlPolicy.ts`.
+Registration hashes passwords with bcrypt. Login creates a signed JWT in an HTTP-only cookie; logout clears it; protected middleware verifies the cookie and attaches the authenticated user. Kit and practice controllers query by both resource ID and authenticated owner ID.
 
-## Database
+Production cookies use `httpOnly`, `secure`, `sameSite: "none"`, and the configured finite TTL. Development uses `sameSite: "lax"`. CORS allows only `WEB_ORIGIN` with `credentials: true`; the frontend uses `credentials: "include"`. State-changing production requests also require the exact configured `Origin` header.
 
-- `User`: `email`, `passwordHash`, timestamps. No plaintext passwords. Auth uses signed HTTP-only JWT cookies.
-- `Kit`: owner, input (`jd`, `company_url`, `days`), generation `status` / `progress` / `warnings`, embedded Appendix A `kit`, editor and practice metadata, optional input fingerprint.
+Input bodies are limited and validated with Zod. Retrieval has URL, DNS, protocol, redirect, content-type, content-size, timeout, retry, and SSRF checks. The evaluator has a narrow internal `mode: "evaluator"` that permits supplied localhost fixtures such as `http://localhost:8099/acme/`; production requests cannot select that mode and still reject unsafe public targets.
 
-## Current implementation status (Prompt 15)
+## Failure Handling and Trade-offs
 
-Implemented:
-
-- Express app, JSON parsing, CORS, 404/error handlers
-- `GET /health`
-- Typed env loading
-- Mongo connection helpers
-- User and Kit models
-- Appendix A Zod schemas and referential integrity
-- Generation status / warning types
-- OpenAI-compatible structured LLM client boundary with injectable test doubles
-- URL policy boundary
-- Shared dependency-injected `generateKitPipeline()`
-- Evaluator CLI command surface
-- Domain tests
-- Bounded company-site retrieval foundation with SSRF checks, redirects, robots, parsing, ranking, and partial-failure warnings
-- JD extraction with validated structured output, deterministic normalization, evidence filtering, and stable requirement IDs
-- Multi-stage technical, behavioural, system-design, and company-fit question generation
-- Deterministic requirement coverage, targeted gap filling, and must-have fallback questions
-- Grounded flashcard generation with bounded repair, strict references, deduplication, and internal metadata
-- Deterministic study scheduling with exact day counts, priority scoring, integer minute allocation, and repeat review
-- Canonical dependency-injected end-to-end generation pipeline with persisted progress
-- Persistence-backed duplicate trigger protection and stale-generation recovery
-- Strict final Appendix A assembly and validation before completion
-- Revisioned kit builder with local-draft-friendly question, flashcard, company brief, pin, add/delete, and reorder mutations
-- Stable generated/user item metadata, deleted-ID reservation, ownership checks, strict mutation validation, and conflict responses
-- Deterministic coverage/schedule derivation after builder edits
-- Working Appendix B batch evaluator with strict input validation, per-case isolation, bounded concurrency, atomic output, and canonical pipeline reuse
-
-Known provider-dependent limitations:
-
-- Live LLM generation and public research require configured provider credentials.
-- The evaluator command is fully wired, but a successful live-provider batch requires those credentials and an available fixture/public source.
-
-## Company retrieval
-
-`src/core/retrieval/crawl-company.ts` exposes the framework-independent `crawlCompanySite()` entry point. It validates the supplied URL, fetches the homepage, reads `robots.txt`, extracts same-host links from actual HTML, ranks those links by deterministic relevance signals, and fetches a small bounded set. It does not probe fixed paths such as `/careers`; a nonstandard linked path such as `/company/join-us` is discovered through the page itself.
-
-Production retrieval accepts only HTTP(S), rejects loopback/private/link-local/metadata targets, checks DNS resolution, validates every redirect, uses a finite timeout and response byte limit, and processes only HTML or plain text. Redirects are handled manually with a small maximum. Transient 429/502/503/504 and network failures receive limited exponential backoff retries.
-
-The evaluator mode is an explicit internal `mode: "evaluator"` option for trusted local fixtures such as `http://localhost:8099/acme/`. It is not exposed as a public request-body flag and must not be used for normal web traffic. The protected development endpoint always uses production mode:
-
-`POST /api/kits/:id/research/company`
-
-The endpoint requires authentication and kit ownership. It returns pages, final URLs, source tracking, metadata hints, and warnings, and persists retrieval warnings on the owned kit. It does not call an LLM or generate interview content.
-
-## Public interview research
-
-`src/core/research/interview-search.ts` provides the reusable `researchInterview()` stage. It generates a bounded, role-aware query set, calls the `SearchProvider` abstraction, validates and deduplicates normalized results, ranks likely company-specific interview evidence, and fetches up to five sources through the Prompt 3 safe fetcher. The default provider is Brave Web Search, configured with `SEARCH_API_URL` and `SEARCH_API_KEY`; tests use a fake provider, and missing provider configuration becomes a recoverable `INTERVIEW_SEARCH_UNAVAILABLE` warning.
-
-Sources retain exact URLs, titles, domains, snippets, source type, authority category, fetch time, relevance score, and bounded cleaned text (12,000 characters per source). Company-owned, first-person-public, community, secondary, and unknown provenance remain distinct. No interview rounds, coding tests, or hiring claims are fabricated from the evidence packet.
-
-`POST /api/kits/:id/research/interview` is protected by authentication and kit ownership. Results are stored in the kit's internal `research.interview` field and replace prior machine research results, making repeat clicks idempotent at the document level. Research warnings are also persisted without changing the strict Appendix A schema.
-
-## JD extraction
-
-`POST /api/kits/:id/extract` runs the narrow `extractJobDescription()` core stage using the OpenAI-compatible `LLMClient` boundary. The default provider is the OpenAI Chat Completions API with `LLM_MODEL` (default `gpt-4o-mini`), `LLM_BASE_URL`, and `LLM_API_KEY`. Tests inject a fake client and never require provider credentials.
-
-The prompt receives only the pasted JD, clearly delimited as untrusted source data. The model returns role structure only; company research and public interview sources cannot add requirements. Output is validated with Zod, retried once with validation errors for malformed JSON or invalid enums, then fails with `JD_EXTRACTION_FAILED` rather than saving invalid data. Deterministic post-processing removes duplicates, benefits, EEO/legal text, application instructions, explicit negative requirements, and unsupported hallucinated items using conservative JD evidence checks.
-
-Requirement IDs are assigned after validation in source order as `r1`, `r2`, and so on. Allowed kinds are `technical`, `behavioural`, and `domain`; allowed priorities are `must` and `nice`. Thin job descriptions remain thin, and empty results return `NO_EXPLICIT_REQUIREMENTS`. The original submitted JD character length is stored in extraction metadata as `jdChars`.
-
-## Question generation
-
-`POST /api/kits/:id/generate/questions` runs bounded category stages in deterministic order: technical, behavioural, system-design, then company-fit. Each stage receives only the context it needs and uses the existing structured LLM client. Technical, behavioural, and system-design questions must reference persisted JD requirement IDs; company-fit questions may use empty requirement references when grounded in company or public evidence.
-
-Model drafts are validated, repaired at most once, normalized, deduplicated, checked against valid requirement IDs, and assigned exported IDs `q1`, `q2`, and so on in TypeScript. Difficulty is always an integer from 1 to 3. Generated question edit metadata (`origin`, `edited`, `pinned`) is stored separately and is not exposed in the strict Appendix A question shape.
-
-Category failures are partial and produce warnings without discarding successful categories. Missing requirements or research skip unsupported categories honestly. Coverage checking, targeted gap generation, regeneration, flashcards, scheduling, and final kit completion are handled by the shared pipeline and deterministic services.
-
-Scraped HTML is untrusted source text. The parser removes executable/noisy elements but does not treat page text as instructions. Future LLM prompts must preserve that boundary.
-
-## Canonical generation pipeline
-
-`src/core/pipeline/generateKit.ts` is the reusable orchestration entry point for the web API and future batch evaluator. It runs company crawl, public interview research, JD extraction, question generation and coverage, flashcards, deterministic scheduling, final validation, and strict Appendix A assembly. Core code has no Express or React dependencies; the API supplies persistence and progress callbacks.
-
-`POST /api/kits/:id/generate` starts a server-side run and returns `202`. The kit document stores current `status`, `progress`, and `generation` metadata. The frontend polls `GET /api/kits/:id` every two seconds while an active stage is running, so refreshes recover the visible state. A persistence-backed atomic guard rejects fresh duplicate runs with `GENERATION_ALREADY_IN_PROGRESS`; runs older than `GENERATION_STALE_MINUTES` (default 15) may be retried.
-
-Company retrieval and public interview search are recoverable warnings. JD extraction, must-have coverage failure, schedule invariant failure, and final validation failure are fatal. Flashcard provider failure is nonfatal when questions and a valid schedule still exist. Final status becomes `completed` only after strict schema, reference, coverage, schedule, and ID validation passes.
-
-## Coverage, flashcards, and scheduling
-
-Question coverage is computed in TypeScript from requirement IDs, never by asking the LLM whether a kit is complete. The first question pass is checked, uncovered IDs receive one targeted gap pass, and must-have gaps receive conservative deterministic fallback questions. Coverage is persisted as `uncovered_requirement_ids` and `passes`; internal diagnostics remain separate.
-
-`POST /api/kits/:id/generate/flashcards` uses one narrow structured prompt with at most one repair attempt. Flashcards are grounded in the role, requirements, questions, and answer outlines. IDs are assigned in TypeScript as `f1`, `f2`, and so on; invalid requirement references are rejected, duplicate cards are removed, and metadata (`origin`, `edited`, `pinned`) is stored outside the strict Appendix A shape. Thin or requirement-free roles produce few or no cards, and provider failure preserves existing kit content with a warning.
-
-`POST /api/kits/:id/generate/schedule` uses no LLM. The scheduler validates the stored `days` value (1-60), scores must requirements above nice requirements, weights harder questions earlier, distributes a deterministic total study budget using integer remainder allocation, and emits exactly the requested day count. Later days repeat valid high-value questions for review when there are more days than questions. Every must requirement must be represented by a scheduled question, otherwise scheduling fails without replacing prior content.
-
-The LLM does not allocate study days, choose minute values, assign question IDs, or validate schedule references. Schedule arithmetic is pure TypeScript.
-
-Robots rules are honored for the PrepForge user-agent and wildcard rules. Missing or unavailable robots files produce a recoverable warning and the crawler remains shallow, same-origin, low-concurrency, and rate-limited. Site terms cannot be universally interpreted automatically; operators remain responsible for applicable terms.
-
-## Honesty
-
-Thin job descriptions produce thin kits. Missing pages are reported, not invented.
+- Invalid or unsafe URLs fail validation before retrieval.
+- 404s, timeouts, unsupported content, unavailable robots, missing hiring pages, and missing public interview evidence become honest warnings where a usable kit can continue.
+- Thin JDs remain thin instead of being filled with invented requirements.
+- Malformed structured LLM output receives a bounded repair attempt; invalid output then fails the relevant stage.
+- LLM unavailable and rate-limited states are surfaced as provider failures; tests inject fake clients.
+- Duplicate generation triggers are blocked by a persistence-backed lock; stale active runs can be retried.
+- Flashcard provider failure preserves existing content when possible.
+- Schedule and final validation failures do not replace prior valid content.
+- Retrieval is intentionally shallow and bounded, trading completeness for predictable latency and lower SSRF/rate-limit exposure.
+- Render free-tier cold starts and Groq/search provider quotas can delay or limit live generation.
+- Scheduling is deterministic and explainable rather than a full optimization solver.
 
 ## Deployment
 
-Deploy this repository as a long-running Node.js service with Node 20+, `npm ci`, `npm run build`, and `npm start`. Configure `NODE_ENV=production`, `MONGODB_URI`, a strong unique `SESSION_SECRET`, the exact deployed frontend `WEB_ORIGIN`, `LLM_API_KEY`, and `SEARCH_API_KEY` in the host environment. Do not commit production values. The frontend must call this service through its public `NEXT_PUBLIC_API_URL`; the API uses credentialed CORS and production `SameSite=None; Secure` cookies for cross-site deployments. Verify `/health`, registration, login, refresh, logout, ownership isolation, and one real generation after deployment.
+### Render backend
+
+Use Node 20+ with:
+
+~~~bash
+npm ci --include=dev && npm run build
+npm start
+~~~
+
+Set these values in Render, using placeholders for secrets:
+
+~~~env
+NODE_ENV=production
+MONGODB_URI=<MongoDB Atlas SRV URI>
+SESSION_SECRET=<strong random secret, at least 32 characters>
+WEB_ORIGIN=https://prepforge-frontend.netlify.app
+AUTH_COOKIE_NAME=pf_session
+AUTH_TOKEN_TTL_SECONDS=604800
+BCRYPT_ROUNDS=10
+LLM_API_KEY=<Groq API key>
+LLM_MODEL=openai/gpt-oss-20b
+LLM_BASE_URL=https://api.groq.com/openai/v1
+SEARCH_API_URL=https://api.search.brave.com/res/v1/web/search
+SEARCH_API_KEY=
+~~~
+
+Do not set a production MongoDB URI to localhost. Render supplies `PORT` through the environment. Verify `/health`, registration, login, refresh, logout, ownership isolation, and one real generation after deployment.
+
+### Netlify frontend
+
+Set:
+
+~~~env
+NEXT_PUBLIC_API_URL=https://prepforge-backend-pha6.onrender.com
+~~~
+
+The backend must use the exact Netlify URL as `WEB_ORIGIN`, without a trailing slash. Never expose backend secrets in Netlify variables.
+
+## Batch Evaluator
+
+The mandatory command is:
+
+~~~bash
+npm run evaluate -- --input <cases.json> --output <kits.json>
+~~~
+
+Example:
+
+~~~bash
+npm run evaluate -- --input cases.json --output kits.json
+~~~
+
+Input is a JSON array:
+
+~~~json
+[
+  {
+    "id": "case-01",
+    "jd": "Senior Backend Engineer...",
+    "company_url": "http://localhost:8099/acme/",
+    "days": 5
+  }
+]
+~~~
+
+Output is an Appendix B envelope with one ordered result per input:
+
+~~~json
+{
+  "version": "1.0",
+  "generated_at": "...",
+  "kits": [
+    { "id": "case-01", "status": "ok", "kit": {}, "error": null }
+  ]
+}
+~~~
+
+The evaluator validates IDs and fields, continues after a case-level invalid input or generation failure, writes one result per case, uses bounded concurrency of two, writes output atomically, and invokes the same `generateKitPipeline()` as the web API. Duplicate or missing IDs invalidate the invocation. Evaluator mode is the only path that permits the supplied localhost fixture; production SSRF policy is unchanged.
+
+## Tests
+
+~~~bash
+npm run lint
+npm run typecheck
+npm run test
+~~~
+
+The tests cover deterministic coverage and gap passes, deterministic scheduling including one-day and sixty-day boundaries, Appendix A and referential validation, retrieval and SSRF policy, robots and redirects, authentication/input schemas, evaluator isolation and output, regeneration preservation, practice ordering/confidence, question and flashcard generation boundaries, and pipeline failure handling.
+
+## Known Limitations and Potential Assignment Gaps
+
+- The frontend has no automated browser end-to-end test suite; validation is covered by backend domain/API tests and manual production testing.
+- Public interview research depends on an optional Brave Search credential. Without it, the application intentionally reports warnings and does not invent sources.
+- The live provider path requires valid Groq credentials; tests use injected clients and do not prove provider availability.
+- There is no full external integration test against the deployed Netlify, Render, MongoDB Atlas, and Groq services in this repository.
+
+## Creative Feature
+
+The implemented creative feature is confidence-aware flashcard practice. It persists confidence and practice history separately from the generated Appendix A kit, prioritizes weak and unpracticed cards, and lets the user turn generated content into a focused review session without changing the builder revision or schedule.
